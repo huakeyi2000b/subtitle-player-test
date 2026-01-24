@@ -119,7 +119,15 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
           <Settings className="w-5 h-5" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 bg-card border-border z-50 max-h-[80vh] overflow-y-auto" align="end" sideOffset={8}>
+      <PopoverContent 
+        className="w-80 sm:w-80 w-[calc(100vw-2rem)] bg-card border-border max-h-[70vh] sm:max-h-[80vh] overflow-y-auto shadow-2xl" 
+        align="end" 
+        alignOffset={-8}
+        sideOffset={8}
+        style={{ zIndex: 10000 }}
+        avoidCollisions={true}
+        collisionPadding={20}
+      >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-medium text-foreground">字幕样式设置</h4>

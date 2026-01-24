@@ -53,7 +53,7 @@ export function drawSubtitleOnCanvas(
   if (isTranslationAbove && showTranslation && subtitle.translatedText) {
     lines.push({
       text: normalizeSubtitleText(subtitle.translatedText),
-      fontSize: style.translationFontSize,
+      fontSize: style.translationFontSize * 2, // 乘以2倍
       color: style.translationFontColor,
       fontWeight: getFontWeight(style.translationFontWeight),
       fontFamily: getFontFamilyCSS(style.translationFontFamily),
@@ -63,7 +63,7 @@ export function drawSubtitleOnCanvas(
   if (showOriginal) {
     lines.push({
       text: normalizeSubtitleText(subtitle.text),
-      fontSize: style.fontSize,
+      fontSize: style.fontSize * 2, // 乘以2倍
       color: style.fontColor,
       fontWeight: getFontWeight(style.fontWeight),
       fontFamily: getFontFamilyCSS(style.fontFamily),
@@ -73,7 +73,7 @@ export function drawSubtitleOnCanvas(
   if (!isTranslationAbove && showTranslation && subtitle.translatedText) {
     lines.push({
       text: normalizeSubtitleText(subtitle.translatedText),
-      fontSize: style.translationFontSize,
+      fontSize: style.translationFontSize * 2, // 乘以2倍
       color: style.translationFontColor,
       fontWeight: getFontWeight(style.translationFontWeight),
       fontFamily: getFontFamilyCSS(style.translationFontFamily),

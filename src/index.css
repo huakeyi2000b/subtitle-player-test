@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
@@ -146,5 +146,98 @@
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground));
+  }
+
+  /* Prevent media elements from going fullscreen */
+  video, audio {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+  }
+
+  video::-webkit-media-controls-fullscreen-button {
+    display: none !important;
+  }
+
+  video::-webkit-media-controls-picture-in-picture-button {
+    display: none !important;
+  }
+
+  video::-webkit-media-controls {
+    display: none !important;
+  }
+
+  audio::-webkit-media-controls {
+    display: none !important;
+  }
+
+  /* Ensure popovers are above everything on mobile */
+  [data-radix-popper-content-wrapper] {
+    z-index: 10000 !important;
+  }
+
+  /* Mobile viewport fixes */
+  @media (max-width: 640px) {
+    [data-radix-popper-content-wrapper] {
+      position: fixed !important;
+      z-index: 10000 !important;
+    }
+  }
+
+  /* Improve scrollbar visibility */
+  [data-radix-scroll-area-scrollbar] {
+    background: hsl(var(--secondary)) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    border-radius: 6px !important;
+    padding: 2px !important;
+  }
+
+  [data-radix-scroll-area-thumb] {
+    background: hsl(var(--primary)) !important;
+    border-radius: 4px !important;
+    opacity: 0.9 !important;
+    min-width: 40px !important;
+    border: 1px solid hsl(var(--primary-foreground) / 0.2) !important;
+  }
+
+  [data-radix-scroll-area-thumb]:hover {
+    background: hsl(var(--primary) / 0.8) !important;
+    opacity: 1 !important;
+    transform: scale(1.05) !important;
+    transition: all 0.2s ease !important;
+  }
+
+  /* Timeline specific scrollbar - force visibility with higher specificity */
+  .timeline-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="horizontal"] {
+    height: 16px !important;
+    background: hsl(var(--secondary)) !important;
+    border: 2px solid hsl(var(--border)) !important;
+    border-radius: 8px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .timeline-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="horizontal"] [data-radix-scroll-area-thumb] {
+    background: #ea580c !important; /* orange-600 - 直接使用hex颜色 */
+    border: 2px solid #ffffff !important;
+    border-radius: 6px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    min-width: 60px !important;
+    height: 12px !important;
+  }
+
+  .timeline-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="horizontal"] [data-radix-scroll-area-thumb]:hover {
+    background: #c2410c !important; /* orange-700 */
+    transform: scale(1.1) !important;
+    transition: all 0.2s ease !important;
+  }
+
+  /* Additional fallback with even higher specificity */
+  div.timeline-scrollbar div[data-radix-scroll-area-scrollbar] div[data-radix-scroll-area-thumb] {
+    background-color: #ea580c !important;
+  }
+
+  div.timeline-scrollbar div[data-radix-scroll-area-scrollbar] div[data-radix-scroll-area-thumb]:hover {
+    background-color: #c2410c !important;
   }
 }

@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from 'react';
+import { Play, Pause, Volume2, VolumeX, Maximize2, ArrowUpDown } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { formatTimeShort } from '@/lib/subtitleParser';
@@ -7,6 +7,55 @@ import type { Subtitle } from '@/lib/subtitleParser';
 import type { TranslatedSubtitle } from '@/lib/translationService';
 import { SubtitleStyleSettings, defaultSubtitleStyle, getFontFamilyCSS, type SubtitleStyle } from './SubtitleStyleSettings';
 import { normalizeSubtitleText } from '@/lib/transcriptionService';
+
+// Function to split bilingual text (same as in SubtitleList)
+function splitBilingualText(text: string): { original: string; translated: string } | null {
+  const chineseRegex = /[\u4e00-\u9fa5]/;
+  const englishRegex = /[a-zA-Z]/;
+  
+  if (chineseRegex.test(text) && englishRegex.test(text)) {
+    // Pattern 1: Chinese text followed by English
+    const pattern1 = /^([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)\s*([a-zA-Z\s,.'!?;:()"-]+)$/;
+    const match1 = text.match(pattern1);
+    if (match1) {
+      return {
+        original: match1[1].trim(),
+        translated: match1[2].trim()
+      };
+    }
+    
+    // Pattern 2: English followed by Chinese
+    const pattern2 = /^([a-zA-Z\s,.'!?;:()"-]+)\s*([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)$/;
+    const match2 = text.match(pattern2);
+    if (match2) {
+      return {
+        original: match2[2].trim(),
+        translated: match2[1].trim()
+      };
+    }
+    
+    // Pattern 3: Try to split by sentence boundaries
+    const sentences = text.split(/[.!?。！？]\s+/);
+    if (sentences.length >= 2) {
+      const firstPart = sentences[0];
+      const secondPart = sentences.slice(1).join(' ');
+      
+      if (chineseRegex.test(firstPart) && englishRegex.test(secondPart)) {
+        return {
+          original: firstPart.trim(),
+          translated: secondPart.trim()
+        };
+      } else if (englishRegex.test(firstPart) && chineseRegex.test(secondPart)) {
+        return {
+          original: secondPart.trim(),
+          translated: firstPart.trim()
+        };
+      }
+    }
+  }
+  
+  return null;
+}
 
 interface MediaPlayerProps {
   src: string;
@@ -46,6 +95,18 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
   const [volume, setVolume] = React.useState(1);
   const [isMuted, setIsMuted] = React.useState(false);
   const [duration, setDuration] = React.useState(0);
+  const [swapBilingualOrder, setSwapBilingualOrder] = useState(false);
+
+  // Find current subtitle
+  const currentSubtitle = subtitles.find(
+    sub => currentTime >= sub.startTime && currentTime <= sub.endTime
+  ) as TranslatedSubtitle | undefined;
+
+  // Check if current subtitle has bilingual content
+  const hasBilingualContent = currentSubtitle && (
+    ('translatedText' in currentSubtitle && currentSubtitle.translatedText) ||
+    splitBilingualText(currentSubtitle.text) !== null
+  );
 
   useImperativeHandle(ref, () => ({
     seek: (time: number) => {
@@ -66,6 +127,36 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
       }
     }
   }, [isPlaying]);
+
+  // Prevent fullscreen and other unwanted behaviors
+  useEffect(() => {
+    const mediaElement = mediaRef.current;
+    if (!mediaElement) return;
+
+    const preventFullscreen = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const preventContextMenu = (e: Event) => {
+      e.preventDefault();
+    };
+
+    // Prevent various fullscreen triggers
+    mediaElement.addEventListener('webkitfullscreenchange', preventFullscreen);
+    mediaElement.addEventListener('fullscreenchange', preventFullscreen);
+    mediaElement.addEventListener('webkitenterfullscreen', preventFullscreen);
+    mediaElement.addEventListener('contextmenu', preventContextMenu);
+    mediaElement.addEventListener('dblclick', preventFullscreen);
+
+    return () => {
+      mediaElement.removeEventListener('webkitfullscreenchange', preventFullscreen);
+      mediaElement.removeEventListener('fullscreenchange', preventFullscreen);
+      mediaElement.removeEventListener('webkitenterfullscreen', preventFullscreen);
+      mediaElement.removeEventListener('contextmenu', preventContextMenu);
+      mediaElement.removeEventListener('dblclick', preventFullscreen);
+    };
+  }, [src]);
 
   const handleTimeUpdate = () => {
     if (mediaRef.current) {
@@ -114,11 +205,6 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
     }
   };
 
-  // Find current subtitle
-  const currentSubtitle = subtitles.find(
-    sub => currentTime >= sub.startTime && currentTime <= sub.endTime
-  ) as TranslatedSubtitle | undefined;
-
   // Check if current subtitle has translation
   const hasTranslatedText = currentSubtitle && 'translatedText' in currentSubtitle && currentSubtitle.translatedText;
 
@@ -128,50 +214,119 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
   const renderSubtitleContent = () => {
     if (!currentSubtitle) return null;
 
-    const originalText = normalizeSubtitleText(currentSubtitle.text);
-    const translatedText = hasTranslatedText ? normalizeSubtitleText((currentSubtitle as TranslatedSubtitle).translatedText!) : null;
+    // Check if subtitle has translatedText field (from translation feature)
+    const hasTranslatedField = hasTranslatedText;
+    
+    if (hasTranslatedField) {
+      // Use existing logic for translated subtitles
+      const originalText = normalizeSubtitleText(currentSubtitle.text);
+      const translatedText = normalizeSubtitleText((currentSubtitle as TranslatedSubtitle).translatedText!);
 
-    const showOriginal = subtitleStyle.showOriginal;
-    const showTranslation = subtitleStyle.showTranslation && translatedText;
+      const showOriginal = subtitleStyle.showOriginal;
+      const showTranslation = subtitleStyle.showTranslation;
 
-    if (!showOriginal && !showTranslation) return null;
+      if (!showOriginal && !showTranslation) return null;
 
-    const originalStyle: React.CSSProperties = {
-      color: subtitleStyle.fontColor,
-      fontSize: `${subtitleStyle.fontSize}px`,
-      fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
-      fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
-    };
+      const originalStyle: React.CSSProperties = {
+        color: subtitleStyle.fontColor,
+        fontSize: `${subtitleStyle.fontSize}px`,
+        fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
+        fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+      };
 
-    const translationStyle: React.CSSProperties = {
-      color: subtitleStyle.translationFontColor,
-      fontSize: `${subtitleStyle.translationFontSize}px`,
-      fontWeight: subtitleStyle.translationFontWeight === 'bold' ? 700 : subtitleStyle.translationFontWeight === 'medium' ? 500 : 400,
-      fontFamily: getFontFamilyCSS(subtitleStyle.translationFontFamily),
-    };
+      const translationStyle: React.CSSProperties = {
+        color: subtitleStyle.translationFontColor,
+        fontSize: `${subtitleStyle.translationFontSize}px`,
+        fontWeight: subtitleStyle.translationFontWeight === 'bold' ? 700 : subtitleStyle.translationFontWeight === 'medium' ? 500 : 400,
+        fontFamily: getFontFamilyCSS(subtitleStyle.translationFontFamily),
+      };
 
-    // Determine order based on translationPosition
-    const isTranslationAbove = subtitleStyle.translationPosition === 'above';
+      // Determine display order based on swapBilingualOrder
+      const shouldSwapOrder = swapBilingualOrder;
+      const firstText = shouldSwapOrder ? translatedText : originalText;
+      const secondText = shouldSwapOrder ? originalText : translatedText;
+      const firstStyle = shouldSwapOrder ? translationStyle : originalStyle;
+      const secondStyle = shouldSwapOrder ? originalStyle : translationStyle;
 
-    return (
-      <div className="flex flex-col items-center gap-1">
-        {isTranslationAbove && showTranslation && (
-          <p className="text-center leading-relaxed" style={translationStyle}>
-            {translatedText}
-          </p>
-        )}
-        {showOriginal && (
-          <p className="text-center leading-relaxed" style={originalStyle}>
-            {originalText}
-          </p>
-        )}
-        {!isTranslationAbove && showTranslation && (
-          <p className="text-center leading-relaxed" style={translationStyle}>
-            {translatedText}
-          </p>
-        )}
-      </div>
-    );
+      return (
+        <div className="flex flex-col items-center gap-1">
+          {showOriginal && showTranslation && (
+            <>
+              <p className="text-center leading-relaxed" style={firstStyle}>
+                {firstText}
+              </p>
+              <p className="text-center leading-relaxed" style={secondStyle}>
+                {secondText}
+              </p>
+            </>
+          )}
+          {showOriginal && !showTranslation && (
+            <p className="text-center leading-relaxed" style={originalStyle}>
+              {originalText}
+            </p>
+          )}
+          {!showOriginal && showTranslation && (
+            <p className="text-center leading-relaxed" style={translationStyle}>
+              {translatedText}
+            </p>
+          )}
+        </div>
+      );
+    } else {
+      // Try to split mixed bilingual text
+      const splitResult = splitBilingualText(currentSubtitle.text);
+      
+      if (splitResult) {
+        // Display as bilingual with split text
+        const originalStyle: React.CSSProperties = {
+          color: subtitleStyle.fontColor,
+          fontSize: `${subtitleStyle.fontSize}px`,
+          fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
+          fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+        };
+
+        const translationStyle: React.CSSProperties = {
+          color: subtitleStyle.translationFontColor,
+          fontSize: `${subtitleStyle.translationFontSize}px`,
+          fontWeight: subtitleStyle.translationFontWeight === 'bold' ? 700 : subtitleStyle.translationFontWeight === 'medium' ? 500 : 400,
+          fontFamily: getFontFamilyCSS(subtitleStyle.translationFontFamily),
+        };
+
+        // Determine display order based on swapBilingualOrder
+        const firstText = swapBilingualOrder ? splitResult.translated : splitResult.original;
+        const secondText = swapBilingualOrder ? splitResult.original : splitResult.translated;
+        const firstStyle = swapBilingualOrder ? translationStyle : originalStyle;
+        const secondStyle = swapBilingualOrder ? originalStyle : translationStyle;
+
+        return (
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-center leading-relaxed" style={firstStyle}>
+              {normalizeSubtitleText(firstText)}
+            </p>
+            <p className="text-center leading-relaxed" style={secondStyle}>
+              {normalizeSubtitleText(secondText)}
+            </p>
+          </div>
+        );
+      } else {
+        // Display as single line if no bilingual pattern detected
+        const originalText = normalizeSubtitleText(currentSubtitle.text);
+        const originalStyle: React.CSSProperties = {
+          color: subtitleStyle.fontColor,
+          fontSize: `${subtitleStyle.fontSize}px`,
+          fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
+          fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+        };
+
+        return (
+          <div className="flex flex-col items-center">
+            <p className="text-center leading-relaxed" style={originalStyle}>
+              {originalText}
+            </p>
+          </div>
+        );
+      }
+    }
   };
 
   return (
@@ -183,6 +338,19 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
           className={type === 'video' ? 'w-full h-full object-contain' : 'hidden'}
+          controls={false}
+          disablePictureInPicture={true}
+          controlsList="nodownload nofullscreen noremoteplayback"
+          playsInline={true}
+          preload="metadata"
+          style={{ pointerEvents: 'none' }}
+        />
+        
+        {/* Overlay to prevent direct media interaction */}
+        <div 
+          className="absolute inset-0 z-10 cursor-pointer"
+          onClick={onPlayPause}
+          onDoubleClick={(e) => e.preventDefault()}
         />
         
         {type === 'audio' && (
@@ -197,10 +365,10 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         {/* Subtitle overlay */}
         {currentSubtitle && (subtitleStyle.showOriginal || (subtitleStyle.showTranslation && hasTranslatedText)) && (
           <div 
-            className={`absolute left-0 right-0 flex justify-center px-4 ${
+            className={`absolute left-0 right-0 flex justify-center px-4 z-20 ${
               subtitleStyle.position === 'top' ? 'top-4' : 
               subtitleStyle.position === 'center' ? 'top-1/2 -translate-y-1/2' : 
-              'bottom-20'
+              'bottom-4'
             }`}
           >
             <div 
@@ -264,6 +432,19 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Bilingual order swap button */}
+            {hasBilingualContent && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSwapBilingualOrder(!swapBilingualOrder)}
+                className="hover:bg-primary/20 hover:text-primary"
+                title="切换双语顺序"
+              >
+                <ArrowUpDown className="w-5 h-5" />
+              </Button>
+            )}
+            
             {onSubtitleStyleChange && (
               <SubtitleStyleSettings
                 style={subtitleStyle}

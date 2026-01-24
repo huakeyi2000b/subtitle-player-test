@@ -77,61 +77,38 @@ export function Timeline({
     return zoom * 100; // percentage
   }, [zoom]);
 
-  // Generate time markers
+  // Generate time markers with fine subdivisions
   const timeMarkers = useMemo(() => {
-    if (!duration) return [];
+    if (!duration || isNaN(duration) || duration <= 0) return [];
     const markers = [];
 
-    // For videos shorter than 10 seconds, use smaller intervals
-    if (duration <= 10) {
-      // For very short videos, show every second
-      for (let i = 0; i <= duration; i += 1) {
-        markers.push(i);
-      }
+    // Major markers (with labels)
+    let majorInterval: number;
+    if (zoom >= 5) {
+      majorInterval = duration > 300 ? 10 : duration > 60 ? 5 : 2;
+    } else if (zoom >= 2) {
+      majorInterval = duration > 300 ? 30 : duration > 60 ? 15 : 5;
     } else {
-      // For longer videos, major markers every 10 seconds
-      for (let i = 0; i <= duration; i += 10) {
-        markers.push(i);
+      majorInterval = duration > 300 ? 60 : duration > 60 ? 30 : 10;
+    }
+
+    // Add major markers
+    for (let i = 0; i <= duration; i += majorInterval) {
+      if (!isNaN(i) && isFinite(i)) {
+        markers.push({ time: i, type: 'major' });
       }
     }
-    return markers;
-  }, [duration, zoom]);
 
-  // Generate minor tick marks
-  const minorTicks = useMemo(() => {
-    if (!duration) return [];
-    const ticks = [];
-
-    // For videos shorter than 10 seconds, use finer minor ticks
-    if (duration <= 10) {
-      let minorInterval: number;
-      if (zoom >= 5) {
-        minorInterval = 0.2; // Every 0.2 seconds when zoomed in
-      } else if (zoom >= 2) {
-        minorInterval = 0.5; // Every 0.5 seconds at medium zoom
-      } else {
-        minorInterval = 1; // Every 1 second when zoomed out (but these will be skipped as they're major markers)
-      }
-
-      for (let i = 0; i <= duration; i += minorInterval) {
-        // Skip if this position already has a major marker (every 1 second for short videos)
-        const hasMainMarker = Math.abs(i - Math.round(i)) < 0.01;
-        if (!hasMainMarker) {
-          ticks.push(i);
-        }
-      }
-    } else {
-      // For longer videos, always show minor ticks every 1 second
+    // Add minor markers (1-second intervals) when zoomed in
+    if (zoom >= 2) {
       for (let i = 0; i <= duration; i += 1) {
-        // Skip if this position already has a major marker (every 10 seconds)
-        const hasMainMarker = i % 10 === 0;
-        if (!hasMainMarker) {
-          ticks.push(i);
+        if (i % majorInterval !== 0 && !isNaN(i) && isFinite(i)) {
+          markers.push({ time: i, type: 'minor' });
         }
       }
     }
 
-    return ticks;
+    return markers.sort((a, b) => a.time - b.time);
   }, [duration, zoom]);
 
   const getTimeFromMouseX = useCallback((clientX: number): number => {
@@ -233,8 +210,11 @@ export function Timeline({
   const handleSubtitleClick = useCallback((e: React.MouseEvent, subtitleId: number) => {
     e.stopPropagation();
     onSelectSubtitle?.(subtitleId);
-    // 不自动跳转到字幕开始时间，避免时间轴滚动
-  }, [onSelectSubtitle]);
+    const subtitle = subtitles.find(s => s.id === subtitleId);
+    if (subtitle) {
+      onSeek(subtitle.startTime);
+    }
+  }, [subtitles, onSeek, onSelectSubtitle]);
 
   if (!duration) {
     return (
@@ -403,133 +383,147 @@ export function Timeline({
         </div>
 
         {/* Timeline with scroll */}
-        <ScrollArea ref={scrollAreaRef} className="w-full">
-          <div
-            ref={containerRef}
-            className={cn(
-              "relative h-24 bg-secondary/50 rounded-lg overflow-hidden border border-border/30",
-              dragState ? "cursor-grabbing" : "cursor-pointer"
-            )}
-            style={{ width: `${timelineWidth}%`, minWidth: '100%' }}
-            onClick={handleClick}
-            onContextMenu={(e) => handleContextMenu(e)}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseLeave}
-          >
-            {/* Subtitle blocks */}
-            <div className="absolute inset-x-0 top-8 h-12 px-1">
-              {subtitles.map((subtitle) => {
-                const left = (subtitle.startTime / duration) * 100;
-                const width = ((subtitle.endTime - subtitle.startTime) / duration) * 100;
-                const isActive = currentTime >= subtitle.startTime && currentTime <= subtitle.endTime;
-                const isDragging = dragState?.subtitleId === subtitle.id;
-                const isHovered = hoveredSubtitle === subtitle.id;
-                const isSelected = selectedSubtitleId === subtitle.id;
-
-                return (
+        <div className="space-y-0 relative">
+          {/* Time markers - 独立的时间刻度区域 */}
+          <div className="relative h-10 bg-background border border-border rounded-t-lg overflow-visible">
+            <ScrollArea className="w-full">
+              <div
+                className="relative h-full"
+                style={{ width: `${timelineWidth}%`, minWidth: '100%' }}
+              >
+                {timeMarkers.map((marker) => (
                   <div
-                    key={subtitle.id}
-                    className={cn(
-                      "absolute top-0 h-8 rounded transition-all group",
-                      isActive
-                        ? "bg-primary shadow-lg shadow-primary/30"
-                        : isSelected
-                          ? "bg-accent shadow-lg shadow-accent/30"
-                          : "bg-primary/40 hover:bg-primary/60",
-                      isDragging && "ring-2 ring-accent z-20",
-                      isSelected && !isDragging && "ring-2 ring-accent",
-                      isHovered && !isDragging && !isSelected && "ring-1 ring-accent/50"
-                    )}
-                    style={{
-                      left: `${left}%`,
-                      width: `${Math.max(width, 0.3)}%`
-                    }}
-                    title={subtitle.text}
-                    onClick={(e) => handleSubtitleClick(e, subtitle.id)}
-                    onContextMenu={(e) => handleContextMenu(e, subtitle.id)}
-                    onMouseEnter={() => setHoveredSubtitle(subtitle.id)}
-                    onMouseLeave={() => setHoveredSubtitle(null)}
+                    key={`${marker.type}-${marker.time}`}
+                    className="absolute flex flex-col items-center justify-start h-full pt-1"
+                    style={{ left: `${(marker.time / duration) * 100}%` }}
                   >
-                    {/* Subtitle text preview */}
-                    <div className="absolute inset-0 flex items-center justify-center overflow-hidden px-1">
-                      <span className="text-[10px] text-white/80 truncate">
-                        {zoom >= 2 && subtitle.text.slice(0, 20)}
+                    {marker.type === 'major' && (
+                      <span className="text-[11px] text-foreground font-medium transform -translate-x-1/2 mb-1 bg-background/90 px-1.5 py-1 rounded shadow-sm border border-border/50 whitespace-nowrap">
+                        {formatTimeShort(marker.time)}
                       </span>
-                    </div>
-
-                    {onSubtitleChange && (
-                      <>
-                        {/* Left resize handle */}
-                        <div
-                          className={cn(
-                            "absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize",
-                            "opacity-0 group-hover:opacity-100 transition-opacity",
-                            "bg-accent/50 hover:bg-accent rounded-l"
-                          )}
-                          onMouseDown={(e) => handleMouseDown(e, subtitle.id, 'resize-start')}
-                        />
-
-                        {/* Move handle (center area) */}
-                        <div
-                          className="absolute inset-x-2 top-0 bottom-0 cursor-grab active:cursor-grabbing"
-                          onMouseDown={(e) => handleMouseDown(e, subtitle.id, 'move')}
-                        />
-
-                        {/* Right resize handle */}
-                        <div
-                          className={cn(
-                            "absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize",
-                            "opacity-0 group-hover:opacity-100 transition-opacity",
-                            "bg-accent/50 hover:bg-accent rounded-r"
-                          )}
-                          onMouseDown={(e) => handleMouseDown(e, subtitle.id, 'resize-end')}
-                        />
-                      </>
                     )}
+                    <div
+                      className={cn(
+                        marker.type === 'major' ? "w-px h-4 bg-foreground/80" : "w-px h-2 bg-foreground/40"
+                      )}
+                    />
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Time markers */}
-            <div className="absolute inset-x-0 top-0 h-8 flex items-start pointer-events-none z-30">
-              {/* Major time markers */}
-              {timeMarkers.map((time) => (
-                <div
-                  key={time}
-                  className="absolute top-0 flex flex-col items-center"
-                  style={{ left: `${(time / duration) * 100}%` }}
-                >
-                  <span className="text-[10px] font-medium text-foreground transform -translate-x-1/2 whitespace-nowrap mb-0.5">
-                    {formatTimeShort(time)}
-                  </span>
-                  <div className="w-px h-8 bg-border" />
-                </div>
-              ))}
-
-              {/* Minor tick marks */}
-              {minorTicks.map((time) => (
-                <div
-                  key={`minor-${time}`}
-                  className="absolute top-0"
-                  style={{ left: `${(time / duration) * 100}%` }}
-                >
-                  <div className="w-px h-6 bg-border/70" />
-                </div>
-              ))}
-            </div>
-
-            {/* Playhead */}
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-accent shadow-lg shadow-accent/50 z-40 pointer-events-none"
-              style={{ left: `${playheadPosition}%` }}
-            >
-              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-accent rounded-full" />
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+
+          {/* Main timeline area */}
+          <ScrollArea ref={scrollAreaRef} className="w-full timeline-scrollbar">
+            <div
+              ref={containerRef}
+              className={cn(
+                "relative h-16 bg-secondary/50 rounded-b-lg overflow-hidden",
+                dragState ? "cursor-grabbing" : "cursor-pointer"
+              )}
+              style={{ width: `${timelineWidth}%`, minWidth: '100%' }}
+              onClick={handleClick}
+              onContextMenu={(e) => handleContextMenu(e)}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
+            >
+
+              {/* Subtitle blocks */}
+              <div className="absolute inset-x-0 top-0 h-full px-1">
+                {subtitles.map((subtitle) => {
+                  const left = (subtitle.startTime / duration) * 100;
+                  const width = ((subtitle.endTime - subtitle.startTime) / duration) * 100;
+                  const isActive = currentTime >= subtitle.startTime && currentTime <= subtitle.endTime;
+                  const isDragging = dragState?.subtitleId === subtitle.id;
+                  const isHovered = hoveredSubtitle === subtitle.id;
+                  const isSelected = selectedSubtitleId === subtitle.id;
+
+                  return (
+                    <div
+                      key={subtitle.id}
+                      className={cn(
+                        "absolute top-0 h-full rounded transition-all group",
+                        isActive
+                          ? "bg-primary shadow-lg shadow-primary/30"
+                          : isSelected
+                            ? "bg-accent shadow-lg shadow-accent/30"
+                            : "bg-primary/40 hover:bg-primary/60",
+                        isDragging && "ring-2 ring-accent z-20",
+                        isSelected && !isDragging && "ring-2 ring-accent",
+                        isHovered && !isDragging && !isSelected && "ring-1 ring-accent/50"
+                      )}
+                      style={{
+                        left: `${left}%`,
+                        width: `${Math.max(width, 0.3)}%`
+                      }}
+                      title={subtitle.text}
+                      onClick={(e) => handleSubtitleClick(e, subtitle.id)}
+                      onContextMenu={(e) => handleContextMenu(e, subtitle.id)}
+                      onMouseEnter={() => setHoveredSubtitle(subtitle.id)}
+                      onMouseLeave={() => setHoveredSubtitle(null)}
+                    >
+                      {/* Subtitle text preview */}
+                      <div className="absolute inset-0 flex items-center justify-center overflow-hidden px-1">
+                        <span className="text-[10px] text-white/80 truncate">
+                          {zoom >= 2 && subtitle.text.slice(0, 20)}
+                        </span>
+                      </div>
+
+                      {onSubtitleChange && (
+                        <>
+                          {/* Left resize handle */}
+                          <div
+                            className={cn(
+                              "absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize",
+                              "opacity-0 group-hover:opacity-100 transition-opacity",
+                              "bg-accent/50 hover:bg-accent rounded-l"
+                            )}
+                            onMouseDown={(e) => handleMouseDown(e, subtitle.id, 'resize-start')}
+                          />
+
+                          {/* Move handle (center area) */}
+                          <div
+                            className="absolute inset-x-2 top-0 bottom-0 cursor-grab active:cursor-grabbing"
+                            onMouseDown={(e) => handleMouseDown(e, subtitle.id, 'move')}
+                          />
+
+                          {/* Right resize handle */}
+                          <div
+                            className={cn(
+                              "absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize",
+                              "opacity-0 group-hover:opacity-100 transition-opacity",
+                              "bg-accent/50 hover:bg-accent rounded-r"
+                            )}
+                            onMouseDown={(e) => handleMouseDown(e, subtitle.id, 'resize-end')}
+                          />
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <ScrollBar
+              orientation="horizontal"
+              className="h-4 bg-secondary border-2 border-border rounded-md"
+            />
+          </ScrollArea>
+
+          {/* Playhead - 跨越整个时间轴区域 */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-white z-50"
+            style={{ left: `${playheadPosition}%` }}
+          >
+            <div
+              className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full cursor-pointer hover:scale-110 transition-transform"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                // 可以在这里添加拖动逻辑
+              }}
+            />
+          </div>
+        </div>
 
         {/* Context Menu */}
         {contextMenu && (

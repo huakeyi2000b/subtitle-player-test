@@ -20,6 +20,7 @@ interface ExportSubtitleDialogProps {
   onClose: () => void;
   subtitles: TranslatedSubtitle[];
   hasTranslation: boolean;
+  videoFileName?: string;
 }
 
 type ExportFormat = 'srt' | 'vtt';
@@ -30,11 +31,38 @@ export function ExportSubtitleDialog({
   onClose,
   subtitles,
   hasTranslation,
+  videoFileName,
 }: ExportSubtitleDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('srt');
   const [includeOriginal, setIncludeOriginal] = useState(true);
   const [includeTranslation, setIncludeTranslation] = useState(hasTranslation);
   const [translationPosition, setTranslationPosition] = useState<TranslationPosition>('below');
+
+  const generateSubtitleFileName = (format: ExportFormat, includeOriginal: boolean, includeTranslation: boolean) => {
+    // 生成基础文件名
+    let baseName = 'subtitles';
+    if (videoFileName) {
+      // 移除原文件的扩展名
+      const nameWithoutExt = videoFileName.replace(/\.[^/.]+$/, '');
+      // 取前8个字符
+      baseName = nameWithoutExt.substring(0, 8);
+    }
+    
+    // 生成时间戳
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
+    
+    // 生成描述后缀
+    const suffixes: string[] = [];
+    if (includeOriginal && includeTranslation) {
+      suffixes.push('双语字幕');
+    } else if (includeTranslation) {
+      suffixes.push('译文字幕');
+    } else {
+      suffixes.push('原文字幕');
+    }
+    
+    return `${baseName}_${suffixes.join('_')}_${timestamp}.${format}`;
+  };
 
   const handleExport = () => {
     if (!includeOriginal && !includeTranslation) {
@@ -54,23 +82,12 @@ export function ExportSubtitleDialog({
 
     if (format === 'srt') {
       content = exportBilingualSRT(subtitles, options);
-      filename = 'subtitles.srt';
+      filename = generateSubtitleFileName('srt', includeOriginal, includeTranslation);
       mimeType = 'text/plain';
     } else {
       content = exportBilingualVTT(subtitles, options);
-      filename = 'subtitles.vtt';
+      filename = generateSubtitleFileName('vtt', includeOriginal, includeTranslation);
       mimeType = 'text/vtt';
-    }
-
-    // Generate filename suffix
-    const suffixes: string[] = [];
-    if (includeOriginal && includeTranslation) {
-      suffixes.push('bilingual');
-    } else if (includeTranslation) {
-      suffixes.push('translated');
-    }
-    if (suffixes.length > 0) {
-      filename = `subtitles_${suffixes.join('_')}.${format}`;
     }
 
     const blob = new Blob([content], { type: mimeType });

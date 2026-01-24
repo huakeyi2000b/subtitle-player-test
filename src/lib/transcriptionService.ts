@@ -22,9 +22,9 @@ const CLAUSE_END_MARKS = /[，、；：,;:]/;
 // Normalize subtitle text: remove unnecessary spaces while keeping proper word spacing
 export function normalizeSubtitleText(text: string): string {
   // Remove spaces before punctuation (both English and Chinese)
-  text = text.replace(/\s+([,.!?;:。，！？；：、·…—–\-\)\]）】」』'"])/g, '$1');
+  text = text.replace(/\s+([,.!?;:。，！？；：、·…—–\-)\]）】」』'"])/g, '$1');
   // Remove spaces after opening punctuation
-  text = text.replace(/([\(\[（【「『'""])\s+/g, '$1');
+  text = text.replace(/([(（【「『'""])\s+/g, '$1');
   // Remove ALL spaces between Chinese characters (including CJK punctuation)
   text = text.replace(/([\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef])\s+([\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef])/g, '$1$2');
   // Apply the Chinese space removal multiple times to catch consecutive characters

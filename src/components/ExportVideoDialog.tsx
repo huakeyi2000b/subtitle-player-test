@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Monitor, Smartphone, Download, Loader2, AlertCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Monitor, Smartphone, Download, Loader2, AlertCircle, Film } from 'lucide-react';
 import { toast } from 'sonner';
 import type { TranslatedSubtitle } from '@/lib/translationService';
 import type { SubtitleStyle } from '@/components/SubtitleStyleSettings';
@@ -27,6 +28,7 @@ interface ExportVideoDialogProps {
 }
 
 type ExportFormat = 'horizontal' | 'vertical';
+type VideoFormat = 'webm' | 'mp4';
 type ExportStage = 'config' | 'rendering' | 'complete' | 'error';
 
 export function ExportVideoDialog({
@@ -39,6 +41,7 @@ export function ExportVideoDialog({
   duration,
 }: ExportVideoDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('horizontal');
+  const [videoFormat, setVideoFormat] = useState<VideoFormat>('mp4');
   const [stage, setStage] = useState<ExportStage>('config');
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
@@ -71,6 +74,36 @@ export function ExportVideoDialog({
       }
     };
   }, [exportedUrl]);
+
+  const getRecorderOptions = useCallback(() => {
+    if (videoFormat === 'mp4') {
+      // Try H.264 for MP4 compatibility
+      const options = [
+        { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2' },
+        { mimeType: 'video/mp4;codecs=h264,aac' },
+        { mimeType: 'video/mp4' },
+        { mimeType: 'video/webm;codecs=h264,opus' },
+        { mimeType: 'video/webm;codecs=vp9,opus' },
+      ];
+      
+      for (const option of options) {
+        if (MediaRecorder.isTypeSupported(option.mimeType)) {
+          return {
+            ...option,
+            videoBitsPerSecond: 8000000,
+            audioBitsPerSecond: 128000,
+          };
+        }
+      }
+    }
+    
+    // Fallback to WebM
+    return {
+      mimeType: 'video/webm;codecs=vp9,opus',
+      videoBitsPerSecond: 8000000,
+      audioBitsPerSecond: 128000,
+    };
+  }, [videoFormat]);
 
   const getOutputDimensions = useCallback(() => {
     if (format === 'vertical') {
@@ -158,11 +191,8 @@ export function ExportVideoDialog({
         console.warn('Could not setup audio:', e);
       }
 
-      const mediaRecorder = new MediaRecorder(canvasStream, {
-        mimeType: 'video/webm;codecs=vp9,opus',
-        videoBitsPerSecond: 8000000,
-        audioBitsPerSecond: 128000,
-      });
+      const recorderOptions = getRecorderOptions();
+      const mediaRecorder = new MediaRecorder(canvasStream, recorderOptions);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
@@ -244,12 +274,28 @@ export function ExportVideoDialog({
     }
   };
 
-  const handleDownload = () => {
-    if (!exportedUrl) return;
+  const generateFileName = useCallback((originalName: string, format: ExportFormat, fileExtension: string) => {
+    // 移除原文件的扩展名
+    const nameWithoutExt = originalName.replace(/\.[^/.]+$/, '');
+    // 取前8个字符，如果是中文字符可能会更少
+    const shortName = nameWithoutExt.substring(0, 8);
+    // 生成时间戳
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
+    // 格式描述
+    const formatDesc = format === 'horizontal' ? '横屏' : '竖屏';
+    
+    return `${shortName}_${formatDesc}_字幕版_${timestamp}.${fileExtension}`;
+  }, []);
 
+  const handleDownload = () => {
+    if (!exportedUrl || !videoFile) return;
+
+    const fileExtension = videoFormat === 'mp4' ? 'mp4' : 'webm';
+    const fileName = generateFileName(videoFile.name, format, fileExtension);
+    
     const a = document.createElement('a');
     a.href = exportedUrl;
-    a.download = `exported_${format}_video.webm`;
+    a.download = fileName;
     a.click();
     toast.success('视频已下载');
   };
@@ -314,11 +360,39 @@ export function ExportVideoDialog({
                 </RadioGroup>
               </div>
 
+              {/* Video Format Selection */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Film className="w-4 h-4" />
+                  输出格式
+                </Label>
+                <Select value={videoFormat} onValueChange={(v) => setVideoFormat(v as VideoFormat)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="选择视频格式" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mp4">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">MP4 (H.264)</span>
+                        <span className="text-xs text-muted-foreground">通用兼容性最佳</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="webm">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">WebM (VP9)</span>
+                        <span className="text-xs text-muted-foreground">文件更小，质量更高</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Info */}
               <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
                 <p>• 字幕样式将与预览完全一致</p>
                 <p>• 双语字幕会按照当前设置导出</p>
-                <p>• 导出格式为 WebM (VP9)</p>
+                <p>• MP4格式兼容性更好，WebM文件更小</p>
+                <p>• 如果MP4不支持，将自动使用WebM格式</p>
               </div>
 
               {/* Actions */}

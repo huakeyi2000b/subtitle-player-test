@@ -14,7 +14,56 @@ import { parseSubtitleFile, type Subtitle } from '@/lib/subtitleParser';
 import { type TranslatedSubtitle } from '@/lib/translationService';
 import { defaultSubtitleStyle, type SubtitleStyle } from '@/components/SubtitleStyleSettings';
 import { useSubtitleHistory } from '@/hooks/useSubtitleHistory';
-import { Download, Trash2, Wand2, Upload, Languages, Film, FileText, Settings } from 'lucide-react';
+import { Download, Trash2, Wand2, Upload, Languages, Film, FileText, Settings, RefreshCw } from 'lucide-react';
+
+// Function to split bilingual text (same as in other components)
+function splitBilingualText(text: string): { original: string; translated: string } | null {
+  const chineseRegex = /[\u4e00-\u9fa5]/;
+  const englishRegex = /[a-zA-Z]/;
+
+  if (chineseRegex.test(text) && englishRegex.test(text)) {
+    // Pattern 1: Chinese text followed by English
+    const pattern1 = /^([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)\s*([a-zA-Z\s,.'!?;:()"-]+)$/;
+    const match1 = text.match(pattern1);
+    if (match1) {
+      return {
+        original: match1[1].trim(),
+        translated: match1[2].trim()
+      };
+    }
+
+    // Pattern 2: English followed by Chinese
+    const pattern2 = /^([a-zA-Z\s,.'!?;:()"-]+)\s*([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)$/;
+    const match2 = text.match(pattern2);
+    if (match2) {
+      return {
+        original: match2[2].trim(),
+        translated: match2[1].trim()
+      };
+    }
+
+    // Pattern 3: Try to split by sentence boundaries
+    const sentences = text.split(/[.!?。！？]\s+/);
+    if (sentences.length >= 2) {
+      const firstPart = sentences[0];
+      const secondPart = sentences.slice(1).join(' ');
+
+      if (chineseRegex.test(firstPart) && englishRegex.test(secondPart)) {
+        return {
+          original: firstPart.trim(),
+          translated: secondPart.trim()
+        };
+      } else if (englishRegex.test(firstPart) && chineseRegex.test(secondPart)) {
+        return {
+          original: secondPart.trim(),
+          translated: firstPart.trim()
+        };
+      }
+    }
+  }
+
+  return null;
+}
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -57,8 +106,15 @@ const Index = () => {
     deleteSubtitle,
   } = useSubtitleHistory([]);
 
-  // Check if subtitles have translations
-  const hasTranslation = subtitles.some(sub => 'translatedText' in sub && sub.translatedText);
+  // Check if subtitles have translations or mixed bilingual content
+  const hasTranslation = subtitles.some(sub => {
+    // Check for translatedText field
+    if ('translatedText' in sub && sub.translatedText) {
+      return true;
+    }
+    // Check for mixed bilingual text
+    return splitBilingualText(sub.text) !== null;
+  });
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -106,12 +162,46 @@ const Index = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, copySubtitle, pasteSubtitle, deleteSubtitle, selectedSubtitleId, subtitles, clipboard]);
 
+  const truncateFileName = useCallback((fileName: string, maxLength: number = 20) => {
+    if (fileName.length <= maxLength) return fileName;
+
+    const extension = fileName.split('.').pop();
+    const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+
+    if (extension) {
+      const availableLength = maxLength - extension.length - 3; // 3 for "..."
+      if (availableLength > 0) {
+        return `${nameWithoutExt.substring(0, availableLength)}...${extension}`;
+      }
+    }
+
+    return `${fileName.substring(0, maxLength - 3)}...`;
+  }, []);
+
   const handleMediaUpload = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
     const type = file.type.startsWith('video') ? 'video' : 'audio';
     setMediaFile({ url, name: file.name, type, file });
     toast.success(`已加载: ${file.name}`);
   }, []);
+
+  const handleReplaceMedia = useCallback((file: File) => {
+    // Clean up old media URL
+    if (mediaFile?.url) {
+      URL.revokeObjectURL(mediaFile.url);
+    }
+
+    const url = URL.createObjectURL(file);
+    const type = file.type.startsWith('video') ? 'video' : 'audio';
+    setMediaFile({ url, name: file.name, type, file });
+
+    // Reset playback state
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+
+    toast.success(`已替换为: ${file.name}`);
+  }, [mediaFile]);
 
   const handleSubtitleUpload = useCallback((file: File) => {
     const reader = new FileReader();
@@ -135,7 +225,7 @@ const Index = () => {
   }, []);
 
   const handleSaveSubtitle = useCallback((updatedSubtitle: Subtitle) => {
-    setSubtitles(prev => 
+    setSubtitles(prev =>
       prev.map(sub => sub.id === updatedSubtitle.id ? updatedSubtitle : sub)
     );
     toast.success('字幕已更新');
@@ -147,7 +237,7 @@ const Index = () => {
   }, [resetHistory]);
 
   const handleSubtitleTimeChange = useCallback((id: number, startTime: number, endTime: number) => {
-    setSubtitlesWithoutHistory(prev => 
+    setSubtitlesWithoutHistory(prev =>
       prev.map(sub => sub.id === id ? { ...sub, startTime, endTime } : sub)
     );
   }, [setSubtitlesWithoutHistory]);
@@ -196,16 +286,16 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header onOpenSettings={() => setShowSettings(true)} />
-      
-      <main className="container mx-auto px-4 py-8">
+
+      <main className="container mx-auto px-4 py-8 pb-20">
         {/* Upload Section */}
         {!mediaFile && (
-          <div className="max-w-4xl mx-auto animate-fade-in">
+          <div className="max-w-4xl mx-auto animate-fade-in mt-16">
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold gradient-text mb-2">开始创作</h2>
               <p className="text-muted-foreground">上传您的媒体文件和字幕，或使用AI自动生成</p>
             </div>
-            
+
             <div className="grid md:grid-cols-2 gap-6">
               <UploadZone
                 type="media"
@@ -229,23 +319,32 @@ const Index = () => {
             <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">正在编辑:</span>
-                <span className="px-3 py-1 rounded-lg bg-secondary text-foreground font-medium">
-                  {mediaFile.name}
-                </span>
-              </div>
-              
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Settings Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowSettings(true)}
-                  className="gap-2"
+                <span
+                  className="px-3 py-1 rounded-lg bg-secondary text-foreground font-medium cursor-default max-w-[200px] truncate"
+                  title={mediaFile.name}
                 >
-                  <Settings className="w-4 h-4" />
-                  设置
-                </Button>
+                  {truncateFileName(mediaFile.name)}
+                </span>
+                {/* Replace Media Button */}
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="video/mp4,video/webm,audio/mp3,audio/mpeg,audio/wav"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleReplaceMedia(file);
+                    }}
+                    className="hidden"
+                  />
+                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/20 hover:text-primary" asChild>
+                    <span>
+                      <RefreshCw className="w-4 h-4" />
+                    </span>
+                  </Button>
+                </label>
+              </div>
 
+              <div className="flex items-center gap-2 flex-wrap">
                 {/* AI Generate Button */}
                 <Button
                   variant="default"
@@ -268,7 +367,7 @@ const Index = () => {
                   <Languages className="w-4 h-4" />
                   翻译字幕
                 </Button>
-                
+
                 {/* Upload subtitle */}
                 <label className="cursor-pointer">
                   <input
@@ -287,7 +386,7 @@ const Index = () => {
                     </span>
                   </Button>
                 </label>
-                
+
                 {/* Export Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -302,7 +401,7 @@ const Index = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => setShowExportSubtitle(true)}
                       disabled={subtitles.length === 0}
                       className="gap-2"
@@ -310,7 +409,7 @@ const Index = () => {
                       <FileText className="w-4 h-4" />
                       导出字幕文件
                     </DropdownMenuItem>
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => setShowExportVideo(true)}
                       disabled={mediaFile?.type !== 'video' || subtitles.length === 0}
                       className="gap-2"
@@ -334,61 +433,79 @@ const Index = () => {
             </div>
 
             {/* Main editor layout */}
-            <div className="grid lg:grid-cols-3 gap-6">
-              {/* Player column */}
-              <div className="lg:col-span-2 space-y-4">
-                <MediaPlayer
-                  ref={playerRef}
-                  src={mediaFile.url}
-                  type={mediaFile.type}
-                  subtitles={subtitles}
-                  currentTime={currentTime}
-                  onTimeUpdate={setCurrentTime}
-                  onDurationChange={setDuration}
-                  isPlaying={isPlaying}
-                  onPlayPause={() => setIsPlaying(!isPlaying)}
-                  subtitleStyle={subtitleStyle}
-                  onSubtitleStyleChange={setSubtitleStyle}
-                  hasTranslation={hasTranslation}
-                />
-                
-                <Timeline
-                  subtitles={subtitles}
-                  duration={duration}
-                  currentTime={currentTime}
-                  onSeek={handleSeek}
-                  onSubtitleChange={handleSubtitleTimeChange}
-                  onInsert={handleInsert}
-                  onCopy={handleCopy}
-                  onPaste={handlePaste}
-                  onDelete={handleDelete}
-                  onUndo={undo}
-                  onRedo={redo}
-                  canUndo={canUndo}
-                  canRedo={canRedo}
-                  hasClipboard={!!clipboard}
-                  selectedSubtitleId={selectedSubtitleId}
-                  onSelectSubtitle={setSelectedSubtitleId}
-                />
+            <div className="space-y-4">
+              {/* Top row: MediaPlayer and SubtitleList */}
+              <div className="grid lg:grid-cols-3 gap-6 items-stretch">
+                {/* Player */}
+                <div className="lg:col-span-2">
+                  <MediaPlayer
+                    ref={playerRef}
+                    src={mediaFile.url}
+                    type={mediaFile.type}
+                    subtitles={subtitles}
+                    currentTime={currentTime}
+                    onTimeUpdate={setCurrentTime}
+                    onDurationChange={setDuration}
+                    isPlaying={isPlaying}
+                    onPlayPause={() => setIsPlaying(!isPlaying)}
+                    subtitleStyle={subtitleStyle}
+                    onSubtitleStyleChange={setSubtitleStyle}
+                    hasTranslation={hasTranslation}
+                  />
+                </div>
+
+                {/* Subtitle list - same height as MediaPlayer only */}
+                <div className="lg:col-span-1">
+                  <SubtitleList
+                    subtitles={subtitles}
+                    currentTime={currentTime}
+                    onSeek={handleSeek}
+                    onEdit={handleEditSubtitle}
+                    onInsert={handleInsert}
+                    onCopy={handleCopy}
+                    onDelete={handleDelete}
+                    selectedSubtitleId={selectedSubtitleId}
+                    onSelectSubtitle={setSelectedSubtitleId}
+                    onUndo={undo}
+                    onRedo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                  />
+                </div>
               </div>
-              
-              {/* Subtitle list column */}
-              <div className="lg:col-span-1">
-                <SubtitleList
-                  subtitles={subtitles}
-                  currentTime={currentTime}
-                  onSeek={handleSeek}
-                  onEdit={handleEditSubtitle}
-                  onInsert={handleInsert}
-                  onCopy={handleCopy}
-                  onDelete={handleDelete}
-                  selectedSubtitleId={selectedSubtitleId}
-                  onSelectSubtitle={setSelectedSubtitleId}
-                  onUndo={undo}
-                  onRedo={redo}
-                  canUndo={canUndo}
-                  canRedo={canRedo}
-                />
+
+              {/* Bottom row: Timeline - same width as MediaPlayer */}
+              <div className="grid lg:grid-cols-3 gap-6 items-stretch">
+                <div className="lg:col-span-2">
+                  <Timeline
+                    subtitles={subtitles}
+                    duration={duration}
+                    currentTime={currentTime}
+                    onSeek={handleSeek}
+                    onSubtitleChange={handleSubtitleTimeChange}
+                    onInsert={handleInsert}
+                    onCopy={handleCopy}
+                    onPaste={handlePaste}
+                    onDelete={handleDelete}
+                    onUndo={undo}
+                    onRedo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    hasClipboard={!!clipboard}
+                    selectedSubtitleId={selectedSubtitleId}
+                    onSelectSubtitle={setSelectedSubtitleId}
+                  />
+                </div>
+                <div className="lg:col-span-1">
+                  {/* Image card */}
+                  <div className="glass-card overflow-hidden h-40">
+                    <img
+                      src="/jiao.jpg?v=1"
+                      alt="Jiao"
+                      className="w-full h-full object-cover hover:scale-110 transition-transform duration-500 ease-in-out animate-pulse"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -436,6 +553,7 @@ const Index = () => {
         onClose={() => setShowExportSubtitle(false)}
         subtitles={subtitles}
         hasTranslation={hasTranslation}
+        videoFileName={mediaFile?.name}
       />
 
       {/* Settings dialog */}
@@ -443,6 +561,15 @@ const Index = () => {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
       />
+
+      {/* Footer */}
+      <footer className="fixed bottom-0 left-0 right-0 border-t border-border/50 bg-background/90 backdrop-blur-sm z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="text-center text-sm text-muted-foreground">
+            Copyright © 2025 <a href="https://s1.hz001.tk/" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-accent transition-colors underline">蓝色空间-AI 故事创作平台</a>. All rights reserved.
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

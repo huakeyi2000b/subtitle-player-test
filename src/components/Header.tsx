@@ -10,7 +10,7 @@ export function Header({ onOpenSettings }: HeaderProps) {
     <header className="border-b border-border/50 bg-card/30 backdrop-blur-xl sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.reload()}>
             <div className="relative">
               <div className="p-2 rounded-xl bg-gradient-to-br from-primary to-accent">
                 <Captions className="w-6 h-6 text-primary-foreground" />
@@ -18,7 +18,7 @@ export function Header({ onOpenSettings }: HeaderProps) {
               <Sparkles className="absolute -top-1 -right-1 w-4 h-4 text-accent animate-pulse" />
             </div>
             <div>
-              <h1 className="text-xl font-bold gradient-text">字幕编辑器</h1>
+              <h1 className="text-xl font-bold gradient-text">字幕编辑器-蓝色空间</h1>
               <p className="text-xs text-muted-foreground">MP4/MP3 字幕同步工具</p>
             </div>
           </div>
