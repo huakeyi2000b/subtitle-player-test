@@ -35,6 +35,17 @@ export interface SubtitleStyle {
   backgroundOpacity: number;
   position: 'bottom' | 'top' | 'center';
   fontWeight: 'normal' | 'medium' | 'bold';
+  // Text processing
+  removePunctuation: boolean; // Remove punctuation marks like periods and commas
+  // Text effects
+  textStroke: boolean;
+  textStrokeWidth: number;
+  textStrokeColor: string;
+  textShadow: boolean;
+  textShadowBlur: number;
+  textShadowColor: string;
+  textShadowOffsetX: number;
+  textShadowOffsetY: number;
   // Bilingual settings
   showOriginal: boolean;
   showTranslation: boolean;
@@ -43,6 +54,15 @@ export interface SubtitleStyle {
   translationFontColor: string;
   translationFontWeight: 'normal' | 'medium' | 'bold';
   translationFontFamily: FontFamily;
+  // Translation text effects
+  translationTextStroke: boolean;
+  translationTextStrokeWidth: number;
+  translationTextStrokeColor: string;
+  translationTextShadow: boolean;
+  translationTextShadowBlur: number;
+  translationTextShadowColor: string;
+  translationTextShadowOffsetX: number;
+  translationTextShadowOffsetY: number;
 }
 
 export const fontFamilyOptions: { value: FontFamily; name: string; css: string }[] = [
@@ -60,6 +80,36 @@ export const getFontFamilyCSS = (fontFamily: FontFamily): string => {
   return fontFamilyOptions.find(f => f.value === fontFamily)?.css || fontFamilyOptions[0].css;
 };
 
+// Function to remove punctuation from text
+export const removePunctuationFromText = (text: string): string => {
+  // Remove common punctuation marks (periods, commas, semicolons, colons, etc.)
+  // Keep spaces and other characters intact
+  return text.replace(/[.,;:!?。，；：！？、]/g, '');
+};
+
+export const getTextEffectsCSS = (style: SubtitleStyle, isTranslation: boolean = false): React.CSSProperties => {
+  const textStroke = isTranslation ? style.translationTextStroke : style.textStroke;
+  const textStrokeWidth = isTranslation ? style.translationTextStrokeWidth : style.textStrokeWidth;
+  const textStrokeColor = isTranslation ? style.translationTextStrokeColor : style.textStrokeColor;
+  const textShadow = isTranslation ? style.translationTextShadow : style.textShadow;
+  const textShadowBlur = isTranslation ? style.translationTextShadowBlur : style.textShadowBlur;
+  const textShadowColor = isTranslation ? style.translationTextShadowColor : style.textShadowColor;
+  const textShadowOffsetX = isTranslation ? style.translationTextShadowOffsetX : style.textShadowOffsetX;
+  const textShadowOffsetY = isTranslation ? style.translationTextShadowOffsetY : style.textShadowOffsetY;
+
+  const effects: any = {};
+
+  if (textStroke) {
+    effects.WebkitTextStroke = `${textStrokeWidth}px ${textStrokeColor}`;
+  }
+
+  if (textShadow) {
+    effects.textShadow = `${textShadowOffsetX}px ${textShadowOffsetY}px ${textShadowBlur}px ${textShadowColor}`;
+  }
+
+  return effects;
+};
+
 const defaultStyle: SubtitleStyle = {
   fontSize: 20,
   fontColor: '#ffffff',
@@ -68,6 +118,17 @@ const defaultStyle: SubtitleStyle = {
   backgroundOpacity: 80,
   position: 'bottom',
   fontWeight: 'medium',
+  // Text processing defaults
+  removePunctuation: false,
+  // Text effects defaults
+  textStroke: false,
+  textStrokeWidth: 1,
+  textStrokeColor: '#000000',
+  textShadow: true,
+  textShadowBlur: 2,
+  textShadowColor: '#000000',
+  textShadowOffsetX: 1,
+  textShadowOffsetY: 1,
   // Bilingual defaults
   showOriginal: true,
   showTranslation: true,
@@ -76,6 +137,15 @@ const defaultStyle: SubtitleStyle = {
   translationFontColor: '#ffff00',
   translationFontWeight: 'medium',
   translationFontFamily: 'noto-sans-sc',
+  // Translation text effects defaults
+  translationTextStroke: false,
+  translationTextStrokeWidth: 1,
+  translationTextStrokeColor: '#000000',
+  translationTextShadow: true,
+  translationTextShadowBlur: 2,
+  translationTextShadowColor: '#000000',
+  translationTextShadowOffsetX: 1,
+  translationTextShadowOffsetY: 1,
 };
 
 const colorPresets = [
@@ -248,6 +318,105 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                       ))}
                     </div>
                   </div>
+
+                  {/* Translation Text Stroke */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-muted-foreground">译文边框</Label>
+                      <Switch
+                        checked={style.translationTextStroke}
+                        onCheckedChange={(checked) => updateStyle({ translationTextStroke: checked })}
+                      />
+                    </div>
+                    
+                    {style.translationTextStroke && (
+                      <>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">边框宽度</Label>
+                            <span className="text-xs text-foreground">{style.translationTextStrokeWidth}px</span>
+                          </div>
+                          <Slider
+                            value={[style.translationTextStrokeWidth]}
+                            min={1}
+                            max={5}
+                            step={0.5}
+                            onValueChange={(v) => updateStyle({ translationTextStrokeWidth: v[0] })}
+                          />
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">边框颜色</Label>
+                          <div className="flex flex-wrap gap-1">
+                            {[{ name: '黑色', value: '#000000' }, { name: '白色', value: '#ffffff' }].map((color) => (
+                              <button
+                                key={`trans-stroke-${color.value}`}
+                                onClick={() => updateStyle({ translationTextStrokeColor: color.value })}
+                                className={`w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 ${
+                                  style.translationTextStrokeColor === color.value ? 'border-primary scale-110' : 'border-transparent'
+                                }`}
+                                style={{ backgroundColor: color.value }}
+                                title={color.name}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Translation Text Shadow */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-muted-foreground">译文阴影</Label>
+                      <Switch
+                        checked={style.translationTextShadow}
+                        onCheckedChange={(checked) => updateStyle({ translationTextShadow: checked })}
+                      />
+                    </div>
+                    
+                    {style.translationTextShadow && (
+                      <>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">模糊半径</Label>
+                            <span className="text-xs text-foreground">{style.translationTextShadowBlur}px</span>
+                          </div>
+                          <Slider
+                            value={[style.translationTextShadowBlur]}
+                            min={0}
+                            max={10}
+                            step={1}
+                            onValueChange={(v) => updateStyle({ translationTextShadowBlur: v[0] })}
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-1">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">水平</Label>
+                            <Slider
+                              value={[style.translationTextShadowOffsetX]}
+                              min={-5}
+                              max={5}
+                              step={1}
+                              onValueChange={(v) => updateStyle({ translationTextShadowOffsetX: v[0] })}
+                            />
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">垂直</Label>
+                            <Slider
+                              value={[style.translationTextShadowOffsetY]}
+                              min={-5}
+                              max={5}
+                              step={1}
+                              onValueChange={(v) => updateStyle({ translationTextShadowOffsetY: v[0] })}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -306,6 +475,18 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
             </Select>
           </div>
 
+          {/* Remove Punctuation */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-sm text-muted-foreground">移除标点符号</Label>
+              <p className="text-xs text-muted-foreground">移除句号、逗号等标点符号</p>
+            </div>
+            <Switch
+              checked={style.removePunctuation}
+              onCheckedChange={(checked) => updateStyle({ removePunctuation: checked })}
+            />
+          </div>
+
           {/* Font Color */}
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">字体颜色</Label>
@@ -329,6 +510,142 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                 title="自定义颜色"
               />
             </div>
+          </div>
+
+          {/* Text Stroke */}
+          <div className="space-y-3 pb-3 border-b border-border">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">字体边框</Label>
+              <Switch
+                checked={style.textStroke}
+                onCheckedChange={(checked) => updateStyle({ textStroke: checked })}
+              />
+            </div>
+            
+            {style.textStroke && (
+              <>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">边框宽度</Label>
+                    <span className="text-xs text-foreground">{style.textStrokeWidth}px</span>
+                  </div>
+                  <Slider
+                    value={[style.textStrokeWidth]}
+                    min={1}
+                    max={5}
+                    step={0.5}
+                    onValueChange={(v) => updateStyle({ textStrokeWidth: v[0] })}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">边框颜色</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {[{ name: '黑色', value: '#000000' }, { name: '白色', value: '#ffffff' }, { name: '灰色', value: '#808080' }].map((color) => (
+                      <button
+                        key={`stroke-${color.value}`}
+                        onClick={() => updateStyle({ textStrokeColor: color.value })}
+                        className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                          style.textStrokeColor === color.value ? 'border-primary scale-110' : 'border-transparent'
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={style.textStrokeColor}
+                      onChange={(e) => updateStyle({ textStrokeColor: e.target.value })}
+                      className="w-6 h-6 rounded-full cursor-pointer border-0 bg-transparent"
+                      title="自定义颜色"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Text Shadow */}
+          <div className="space-y-3 pb-3 border-b border-border">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">字体阴影</Label>
+              <Switch
+                checked={style.textShadow}
+                onCheckedChange={(checked) => updateStyle({ textShadow: checked })}
+              />
+            </div>
+            
+            {style.textShadow && (
+              <>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">模糊半径</Label>
+                    <span className="text-xs text-foreground">{style.textShadowBlur}px</span>
+                  </div>
+                  <Slider
+                    value={[style.textShadowBlur]}
+                    min={0}
+                    max={10}
+                    step={1}
+                    onValueChange={(v) => updateStyle({ textShadowBlur: v[0] })}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">水平偏移</Label>
+                      <span className="text-xs text-foreground">{style.textShadowOffsetX}px</span>
+                    </div>
+                    <Slider
+                      value={[style.textShadowOffsetX]}
+                      min={-5}
+                      max={5}
+                      step={1}
+                      onValueChange={(v) => updateStyle({ textShadowOffsetX: v[0] })}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">垂直偏移</Label>
+                      <span className="text-xs text-foreground">{style.textShadowOffsetY}px</span>
+                    </div>
+                    <Slider
+                      value={[style.textShadowOffsetY]}
+                      min={-5}
+                      max={5}
+                      step={1}
+                      onValueChange={(v) => updateStyle({ textShadowOffsetY: v[0] })}
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">阴影颜色</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {[{ name: '黑色', value: '#000000' }, { name: '白色', value: '#ffffff' }, { name: '灰色', value: '#808080' }].map((color) => (
+                      <button
+                        key={`shadow-${color.value}`}
+                        onClick={() => updateStyle({ textShadowColor: color.value })}
+                        className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                          style.textShadowColor === color.value ? 'border-primary scale-110' : 'border-transparent'
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={style.textShadowColor}
+                      onChange={(e) => updateStyle({ textShadowColor: e.target.value })}
+                      className="w-6 h-6 rounded-full cursor-pointer border-0 bg-transparent"
+                      title="自定义颜色"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Background Color */}

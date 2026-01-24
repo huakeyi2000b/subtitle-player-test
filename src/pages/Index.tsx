@@ -85,9 +85,41 @@ const Index = () => {
   const [showExportVideo, setShowExportVideo] = useState(false);
   const [showExportSubtitle, setShowExportSubtitle] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>(defaultSubtitleStyle);
+  // Load subtitle style from localStorage or use default
+  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>(() => {
+    try {
+      const saved = localStorage.getItem('subtitleStyle');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Merge with default style to ensure all properties exist (for backward compatibility)
+        return { ...defaultSubtitleStyle, ...parsed };
+      }
+    } catch (error) {
+      console.warn('Failed to load subtitle style from localStorage:', error);
+    }
+    return defaultSubtitleStyle;
+  });
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<number | null>(null);
   const playerRef = useRef<MediaPlayerRef>(null);
+
+  // Save subtitle style to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('subtitleStyle', JSON.stringify(subtitleStyle));
+    } catch (error) {
+      console.warn('Failed to save subtitle style to localStorage:', error);
+    }
+  }, [subtitleStyle]);
+
+  // Wrapper function to handle subtitle style updates
+  const handleSubtitleStyleChange = useCallback((newStyle: SubtitleStyle) => {
+    setSubtitleStyle(newStyle);
+  }, []);
+
+  // Reset subtitle style to default (for settings dialog)
+  const handleResetSubtitleStyle = useCallback(() => {
+    setSubtitleStyle(defaultSubtitleStyle);
+  }, []);
 
   // Use subtitle history hook for undo/redo
   const {
@@ -449,7 +481,7 @@ const Index = () => {
                     isPlaying={isPlaying}
                     onPlayPause={() => setIsPlaying(!isPlaying)}
                     subtitleStyle={subtitleStyle}
-                    onSubtitleStyleChange={setSubtitleStyle}
+                    onSubtitleStyleChange={handleSubtitleStyleChange}
                     hasTranslation={hasTranslation}
                   />
                 </div>
@@ -560,6 +592,7 @@ const Index = () => {
       <SettingsDialog
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+        onResetSubtitleStyle={handleResetSubtitleStyle}
       />
 
       {/* Footer */}

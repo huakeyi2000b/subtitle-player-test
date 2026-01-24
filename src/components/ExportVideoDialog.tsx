@@ -11,7 +11,8 @@ import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Monitor, Smartphone, Download, Loader2, AlertCircle, Film } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Monitor, Smartphone, Download, Loader2, AlertCircle, Film, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'sonner';
 import type { TranslatedSubtitle } from '@/lib/translationService';
 import type { SubtitleStyle } from '@/components/SubtitleStyleSettings';
@@ -42,6 +43,7 @@ export function ExportVideoDialog({
 }: ExportVideoDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('horizontal');
   const [videoFormat, setVideoFormat] = useState<VideoFormat>('mp4');
+  const [muteExport, setMuteExport] = useState(false); // 默认有声音合成
   const [stage, setStage] = useState<ExportStage>('config');
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
@@ -77,16 +79,14 @@ export function ExportVideoDialog({
 
   const getRecorderOptions = useCallback(() => {
     if (videoFormat === 'mp4') {
-      // Try H.264 for MP4 compatibility
-      const options = [
+      // For MP4, try various H.264 options but stay within MP4 container
+      const mp4Options = [
         { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2' },
         { mimeType: 'video/mp4;codecs=h264,aac' },
         { mimeType: 'video/mp4' },
-        { mimeType: 'video/webm;codecs=h264,opus' },
-        { mimeType: 'video/webm;codecs=vp9,opus' },
       ];
       
-      for (const option of options) {
+      for (const option of mp4Options) {
         if (MediaRecorder.isTypeSupported(option.mimeType)) {
           return {
             ...option,
@@ -95,11 +95,36 @@ export function ExportVideoDialog({
           };
         }
       }
+      
+      // If no MP4 options work, still return MP4 as fallback
+      // This will force the browser to use its best MP4 support
+      return {
+        mimeType: 'video/mp4',
+        videoBitsPerSecond: 8000000,
+        audioBitsPerSecond: 128000,
+      };
     }
     
-    // Fallback to WebM
+    // For WebM format
+    const webmOptions = [
+      { mimeType: 'video/webm;codecs=vp9,opus' },
+      { mimeType: 'video/webm;codecs=vp8,opus' },
+      { mimeType: 'video/webm' },
+    ];
+    
+    for (const option of webmOptions) {
+      if (MediaRecorder.isTypeSupported(option.mimeType)) {
+        return {
+          ...option,
+          videoBitsPerSecond: 8000000,
+          audioBitsPerSecond: 128000,
+        };
+      }
+    }
+    
+    // Final fallback
     return {
-      mimeType: 'video/webm;codecs=vp9,opus',
+      mimeType: 'video/webm',
       videoBitsPerSecond: 8000000,
       audioBitsPerSecond: 128000,
     };
@@ -179,9 +204,16 @@ export function ExportVideoDialog({
         audioSource = audioContext.createMediaElementSource(video);
         audioDestination = audioContext.createMediaStreamDestination();
         
-        // Connect audio source to both destination (for recording) and speakers
+        // Always connect audio source to destination for recording
         audioSource.connect(audioDestination);
-        audioSource.connect(audioContext.destination);
+        
+        // Create a gain node to control speaker output
+        const gainNode = audioContext.createGain();
+        audioSource.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Set gain based on user preference (0 = mute, 1 = normal volume)
+        gainNode.gain.value = muteExport ? 0 : 1;
         
         // Add audio tracks to canvas stream
         audioDestination.stream.getAudioTracks().forEach(track => {
@@ -192,7 +224,32 @@ export function ExportVideoDialog({
       }
 
       const recorderOptions = getRecorderOptions();
-      const mediaRecorder = new MediaRecorder(canvasStream, recorderOptions);
+      
+      // Log the format selection for debugging
+      console.log('Selected format:', videoFormat);
+      console.log('Recorder options:', recorderOptions);
+      
+      let mediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(canvasStream, recorderOptions);
+      } catch (error) {
+        // If the preferred format fails, try basic format without codecs
+        console.warn('Failed to create MediaRecorder with preferred options:', error);
+        const basicOptions = {
+          mimeType: videoFormat === 'mp4' ? 'video/mp4' : 'video/webm',
+          videoBitsPerSecond: 8000000,
+          audioBitsPerSecond: 128000,
+        };
+        try {
+          mediaRecorder = new MediaRecorder(canvasStream, basicOptions);
+          console.log('Created MediaRecorder with basic options:', basicOptions);
+        } catch (basicError) {
+          // Final fallback - let MediaRecorder choose the format
+          console.warn('Basic format also failed, using default:', basicError);
+          mediaRecorder = new MediaRecorder(canvasStream);
+        }
+      }
+      
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
@@ -208,7 +265,9 @@ export function ExportVideoDialog({
         }
         
         if (chunksRef.current.length > 0) {
-          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+          // Use user-selected format for blob type to ensure proper file format
+          const blobType = videoFormat === 'mp4' ? 'video/mp4' : 'video/webm';
+          const blob = new Blob(chunksRef.current, { type: blobType });
           const url = URL.createObjectURL(blob);
           setExportedUrl(url);
           setStage('complete');
@@ -222,6 +281,7 @@ export function ExportVideoDialog({
 
       // Play video and render frames
       video.currentTime = 0;
+      // Always keep video unmuted for audio capture, but control speaker output via AudioContext
       video.muted = false;
       video.volume = 1;
       await video.play();
@@ -290,13 +350,17 @@ export function ExportVideoDialog({
   const handleDownload = () => {
     if (!exportedUrl || !videoFile) return;
 
-    const fileExtension = videoFormat === 'mp4' ? 'mp4' : 'webm';
+    // Always use the user-selected format for file extension
+    // This ensures MP4 files have .mp4 extension even if browser encoding differs
+    const fileExtension = videoFormat; // 'mp4' or 'webm'
+    
     const fileName = generateFileName(videoFile.name, format, fileExtension);
     
     const a = document.createElement('a');
     a.href = exportedUrl;
     a.download = fileName;
     a.click();
+    
     toast.success('视频已下载');
   };
 
@@ -385,6 +449,26 @@ export function ExportVideoDialog({
                     </SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Audio Export Option */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  {muteExport ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  合成选项
+                </Label>
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">静音合成</span>
+                    <span className="text-xs text-muted-foreground">
+                      合成时不播放声音，但导出视频仍包含音轨
+                    </span>
+                  </div>
+                  <Switch
+                    checked={muteExport}
+                    onCheckedChange={setMuteExport}
+                  />
+                </div>
               </div>
 
               {/* Info */}

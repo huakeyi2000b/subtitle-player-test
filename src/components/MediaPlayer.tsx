@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { formatTimeShort } from '@/lib/subtitleParser';
 import type { Subtitle } from '@/lib/subtitleParser';
 import type { TranslatedSubtitle } from '@/lib/translationService';
-import { SubtitleStyleSettings, defaultSubtitleStyle, getFontFamilyCSS, type SubtitleStyle } from './SubtitleStyleSettings';
+import { SubtitleStyleSettings, defaultSubtitleStyle, getFontFamilyCSS, getTextEffectsCSS, removePunctuationFromText, type SubtitleStyle } from './SubtitleStyleSettings';
 import { normalizeSubtitleText } from '@/lib/transcriptionService';
 
 // Function to split bilingual text (same as in SubtitleList)
@@ -219,8 +219,14 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
     
     if (hasTranslatedField) {
       // Use existing logic for translated subtitles
-      const originalText = normalizeSubtitleText(currentSubtitle.text);
-      const translatedText = normalizeSubtitleText((currentSubtitle as TranslatedSubtitle).translatedText!);
+      let originalText = normalizeSubtitleText(currentSubtitle.text);
+      let translatedText = normalizeSubtitleText((currentSubtitle as TranslatedSubtitle).translatedText!);
+      
+      // Apply punctuation removal if enabled
+      if (subtitleStyle.removePunctuation) {
+        originalText = removePunctuationFromText(originalText);
+        translatedText = removePunctuationFromText(translatedText);
+      }
 
       const showOriginal = subtitleStyle.showOriginal;
       const showTranslation = subtitleStyle.showTranslation;
@@ -232,6 +238,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         fontSize: `${subtitleStyle.fontSize}px`,
         fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
         fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+        ...getTextEffectsCSS(subtitleStyle, false),
       };
 
       const translationStyle: React.CSSProperties = {
@@ -239,6 +246,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         fontSize: `${subtitleStyle.translationFontSize}px`,
         fontWeight: subtitleStyle.translationFontWeight === 'bold' ? 700 : subtitleStyle.translationFontWeight === 'medium' ? 500 : 400,
         fontFamily: getFontFamilyCSS(subtitleStyle.translationFontFamily),
+        ...getTextEffectsCSS(subtitleStyle, true),
       };
 
       // Determine display order based on swapBilingualOrder
@@ -283,6 +291,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           fontSize: `${subtitleStyle.fontSize}px`,
           fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
           fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+          ...getTextEffectsCSS(subtitleStyle, false),
         };
 
         const translationStyle: React.CSSProperties = {
@@ -290,6 +299,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           fontSize: `${subtitleStyle.translationFontSize}px`,
           fontWeight: subtitleStyle.translationFontWeight === 'bold' ? 700 : subtitleStyle.translationFontWeight === 'medium' ? 500 : 400,
           fontFamily: getFontFamilyCSS(subtitleStyle.translationFontFamily),
+          ...getTextEffectsCSS(subtitleStyle, true),
         };
 
         // Determine display order based on swapBilingualOrder
@@ -301,21 +311,27 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         return (
           <div className="flex flex-col items-center gap-1">
             <p className="text-center leading-relaxed" style={firstStyle}>
-              {normalizeSubtitleText(firstText)}
+              {subtitleStyle.removePunctuation ? removePunctuationFromText(normalizeSubtitleText(firstText)) : normalizeSubtitleText(firstText)}
             </p>
             <p className="text-center leading-relaxed" style={secondStyle}>
-              {normalizeSubtitleText(secondText)}
+              {subtitleStyle.removePunctuation ? removePunctuationFromText(normalizeSubtitleText(secondText)) : normalizeSubtitleText(secondText)}
             </p>
           </div>
         );
       } else {
         // Display as single line if no bilingual pattern detected
-        const originalText = normalizeSubtitleText(currentSubtitle.text);
+        let originalText = normalizeSubtitleText(currentSubtitle.text);
+        
+        // Apply punctuation removal if enabled
+        if (subtitleStyle.removePunctuation) {
+          originalText = removePunctuationFromText(originalText);
+        }
         const originalStyle: React.CSSProperties = {
           color: subtitleStyle.fontColor,
           fontSize: `${subtitleStyle.fontSize}px`,
           fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
           fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+          ...getTextEffectsCSS(subtitleStyle, false),
         };
 
         return (

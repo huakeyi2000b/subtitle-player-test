@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onResetSubtitleStyle?: () => void;
 }
 
 const API_KEY_STORAGE_KEY = 'elevenlabs_api_key';
@@ -17,7 +18,7 @@ export function getStoredApiKey(): string {
   return localStorage.getItem(API_KEY_STORAGE_KEY) || '';
 }
 
-export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
+export function SettingsDialog({ isOpen, onClose, onResetSubtitleStyle }: SettingsDialogProps) {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -48,6 +49,14 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     localStorage.removeItem(API_KEY_STORAGE_KEY);
     setIsSaved(false);
     toast.info('API Key 已清除');
+  };
+
+  const handleClearSubtitleStyle = () => {
+    localStorage.removeItem('subtitleStyle');
+    if (onResetSubtitleStyle) {
+      onResetSubtitleStyle();
+    }
+    toast.info('字幕样式缓存已清除');
   };
 
   return (
@@ -132,6 +141,31 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               <li>• 使用您自己的 API Key 可以避免配额限制</li>
               <li>• 如果未设置，将使用默认的服务端配置</li>
             </ul>
+          </div>
+
+          {/* Cache Management Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium flex items-center gap-2">
+              <Settings className="w-4 h-4 text-primary" />
+              缓存管理
+            </Label>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/50">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">字幕样式设置</p>
+                  <p className="text-xs text-muted-foreground">清除保存的字幕样式配置</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearSubtitleStyle}
+                  className="text-destructive hover:text-destructive"
+                >
+                  清除缓存
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
 

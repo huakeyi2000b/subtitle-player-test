@@ -1,7 +1,56 @@
 import type { TranslatedSubtitle } from './translationService';
 import type { SubtitleStyle } from '@/components/SubtitleStyleSettings';
-import { getFontFamilyCSS } from '@/components/SubtitleStyleSettings';
+import { getFontFamilyCSS, getTextEffectsCSS, removePunctuationFromText } from '@/components/SubtitleStyleSettings';
 import { normalizeSubtitleText } from './transcriptionService';
+
+// Function to split bilingual text (same as in MediaPlayer and SubtitleList)
+function splitBilingualText(text: string): { original: string; translated: string } | null {
+  const chineseRegex = /[\u4e00-\u9fa5]/;
+  const englishRegex = /[a-zA-Z]/;
+  
+  if (chineseRegex.test(text) && englishRegex.test(text)) {
+    // Pattern 1: Chinese text followed by English
+    const pattern1 = /^([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)\s*([a-zA-Z\s,.'!?;:()"-]+)$/;
+    const match1 = text.match(pattern1);
+    if (match1) {
+      return {
+        original: match1[1].trim(),
+        translated: match1[2].trim()
+      };
+    }
+    
+    // Pattern 2: English followed by Chinese
+    const pattern2 = /^([a-zA-Z\s,.'!?;:()"-]+)\s*([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)$/;
+    const match2 = text.match(pattern2);
+    if (match2) {
+      return {
+        original: match2[2].trim(),
+        translated: match2[1].trim()
+      };
+    }
+    
+    // Pattern 3: Try to split by sentence boundaries
+    const sentences = text.split(/[.!?。！？]\s+/);
+    if (sentences.length >= 2) {
+      const firstPart = sentences[0];
+      const secondPart = sentences.slice(1).join(' ');
+      
+      if (chineseRegex.test(firstPart) && englishRegex.test(secondPart)) {
+        return {
+          original: firstPart.trim(),
+          translated: secondPart.trim()
+        };
+      } else if (englishRegex.test(firstPart) && chineseRegex.test(secondPart)) {
+        return {
+          original: secondPart.trim(),
+          translated: firstPart.trim()
+        };
+      }
+    }
+  }
+  
+  return null;
+}
 
 export interface VideoExportOptions {
   format: 'horizontal' | 'vertical';
@@ -34,9 +83,13 @@ export function drawSubtitleOnCanvas(
 ): void {
   if (!subtitle) return;
 
+  // Check for translatedText field (from translation feature)
   const hasTranslatedText = subtitle.translatedText;
+  // Check for mixed bilingual text in the main text field
+  const splitResult = splitBilingualText(subtitle.text);
+  
   const showOriginal = style.showOriginal;
-  const showTranslation = style.showTranslation && hasTranslatedText;
+  const showTranslation = style.showTranslation && (hasTranslatedText || splitResult);
 
   if (!showOriginal && !showTranslation) return;
 
@@ -46,37 +99,77 @@ export function drawSubtitleOnCanvas(
   let yPosition: number;
 
   // Prepare text lines
-  const lines: Array<{ text: string; fontSize: number; color: string; fontWeight: number; fontFamily: string }> = [];
+  const lines: Array<{ 
+    text: string; 
+    fontSize: number; 
+    color: string; 
+    fontWeight: number; 
+    fontFamily: string;
+    isTranslation: boolean;
+  }> = [];
   
   const isTranslationAbove = style.translationPosition === 'above';
 
-  if (isTranslationAbove && showTranslation && subtitle.translatedText) {
+  // Determine original and translated text
+  let originalText: string;
+  let translatedText: string | undefined;
+
+  if (hasTranslatedText) {
+    // Use translatedText field
+    originalText = subtitle.text;
+    translatedText = subtitle.translatedText;
+  } else if (splitResult) {
+    // Use split bilingual text
+    originalText = splitResult.original;
+    translatedText = splitResult.translated;
+  } else {
+    // Only original text
+    originalText = subtitle.text;
+    translatedText = undefined;
+  }
+
+  if (isTranslationAbove && showTranslation && translatedText) {
+    let processedText = normalizeSubtitleText(translatedText);
+    if (style.removePunctuation) {
+      processedText = removePunctuationFromText(processedText);
+    }
     lines.push({
-      text: normalizeSubtitleText(subtitle.translatedText),
+      text: processedText,
       fontSize: style.translationFontSize * 2, // 乘以2倍
       color: style.translationFontColor,
       fontWeight: getFontWeight(style.translationFontWeight),
       fontFamily: getFontFamilyCSS(style.translationFontFamily),
+      isTranslation: true,
     });
   }
 
   if (showOriginal) {
+    let processedText = normalizeSubtitleText(originalText);
+    if (style.removePunctuation) {
+      processedText = removePunctuationFromText(processedText);
+    }
     lines.push({
-      text: normalizeSubtitleText(subtitle.text),
+      text: processedText,
       fontSize: style.fontSize * 2, // 乘以2倍
       color: style.fontColor,
       fontWeight: getFontWeight(style.fontWeight),
       fontFamily: getFontFamilyCSS(style.fontFamily),
+      isTranslation: false,
     });
   }
 
-  if (!isTranslationAbove && showTranslation && subtitle.translatedText) {
+  if (!isTranslationAbove && showTranslation && translatedText) {
+    let processedText = normalizeSubtitleText(translatedText);
+    if (style.removePunctuation) {
+      processedText = removePunctuationFromText(processedText);
+    }
     lines.push({
-      text: normalizeSubtitleText(subtitle.translatedText),
+      text: processedText,
       fontSize: style.translationFontSize * 2, // 乘以2倍
       color: style.translationFontColor,
       fontWeight: getFontWeight(style.translationFontWeight),
       fontFamily: getFontFamilyCSS(style.translationFontFamily),
+      isTranslation: true,
     });
   }
 
@@ -123,14 +216,50 @@ export function drawSubtitleOnCanvas(
   
   lines.forEach((line, i) => {
     ctx.font = `${line.fontWeight} ${line.fontSize}px ${line.fontFamily}`;
-    ctx.fillStyle = line.color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     
-    const textY = currentY + (i > 0 ? 8 : 0);
-    ctx.fillText(line.text, canvasWidth / 2, textY, maxWidth - 40);
+    const textY = currentY;
+    const textX = canvasWidth / 2;
     
-    currentY = textY + line.fontSize * lineHeight;
+    // Apply text effects based on style
+    const textStroke = line.isTranslation ? style.translationTextStroke : style.textStroke;
+    const textStrokeWidth = line.isTranslation ? style.translationTextStrokeWidth : style.textStrokeWidth;
+    const textStrokeColor = line.isTranslation ? style.translationTextStrokeColor : style.textStrokeColor;
+    const textShadow = line.isTranslation ? style.translationTextShadow : style.textShadow;
+    const textShadowBlur = line.isTranslation ? style.translationTextShadowBlur : style.textShadowBlur;
+    const textShadowColor = line.isTranslation ? style.translationTextShadowColor : style.textShadowColor;
+    const textShadowOffsetX = line.isTranslation ? style.translationTextShadowOffsetX : style.textShadowOffsetX;
+    const textShadowOffsetY = line.isTranslation ? style.translationTextShadowOffsetY : style.textShadowOffsetY;
+    
+    // Draw shadow first (if enabled)
+    if (textShadow) {
+      ctx.save();
+      ctx.shadowColor = textShadowColor;
+      ctx.shadowBlur = textShadowBlur * 2; // Scale for canvas
+      ctx.shadowOffsetX = textShadowOffsetX * 2;
+      ctx.shadowOffsetY = textShadowOffsetY * 2;
+      ctx.fillStyle = line.color;
+      ctx.fillText(line.text, textX, textY, maxWidth - 40);
+      ctx.restore();
+    }
+    
+    // Draw stroke (if enabled)
+    if (textStroke) {
+      ctx.strokeStyle = textStrokeColor;
+      ctx.lineWidth = textStrokeWidth * 2; // Scale for canvas
+      ctx.lineJoin = 'round';
+      ctx.strokeText(line.text, textX, textY, maxWidth - 40);
+    }
+    
+    // Draw main text
+    ctx.fillStyle = line.color;
+    if (!textShadow) { // Only draw if shadow wasn't already drawn
+      ctx.fillText(line.text, textX, textY, maxWidth - 40);
+    }
+    
+    // Move to next line position
+    currentY += line.fontSize * lineHeight + (i < lines.length - 1 ? 12 : 0); // Add spacing between lines
   });
 }
 
@@ -174,18 +303,36 @@ export function exportBilingualSRT(
     lines.push(String(index + 1));
     lines.push(`${formatTime(sub.startTime)} --> ${formatTime(sub.endTime)}`);
 
-    const hasTranslation = sub.translatedText;
+    // Check for translatedText field or split bilingual text
+    const hasTranslatedText = sub.translatedText;
+    const splitResult = splitBilingualText(sub.text);
+    
+    let originalText: string;
+    let translatedText: string | undefined;
+
+    if (hasTranslatedText) {
+      originalText = sub.text;
+      translatedText = sub.translatedText;
+    } else if (splitResult) {
+      originalText = splitResult.original;
+      translatedText = splitResult.translated;
+    } else {
+      originalText = sub.text;
+      translatedText = undefined;
+    }
+
+    const hasTranslation = translatedText !== undefined;
     
     if (translationPosition === 'above' && includeTranslation && hasTranslation) {
-      lines.push(normalizeSubtitleText(sub.translatedText!));
+      lines.push(normalizeSubtitleText(translatedText!));
     }
     
     if (includeOriginal) {
-      lines.push(normalizeSubtitleText(sub.text));
+      lines.push(normalizeSubtitleText(originalText));
     }
     
     if (translationPosition === 'below' && includeTranslation && hasTranslation) {
-      lines.push(normalizeSubtitleText(sub.translatedText!));
+      lines.push(normalizeSubtitleText(translatedText!));
     }
 
     return lines.join('\n');
@@ -217,18 +364,36 @@ export function exportBilingualVTT(
     lines.push(String(index + 1));
     lines.push(`${formatTime(sub.startTime)} --> ${formatTime(sub.endTime)}`);
 
-    const hasTranslation = sub.translatedText;
+    // Check for translatedText field or split bilingual text
+    const hasTranslatedText = sub.translatedText;
+    const splitResult = splitBilingualText(sub.text);
+    
+    let originalText: string;
+    let translatedText: string | undefined;
+
+    if (hasTranslatedText) {
+      originalText = sub.text;
+      translatedText = sub.translatedText;
+    } else if (splitResult) {
+      originalText = splitResult.original;
+      translatedText = splitResult.translated;
+    } else {
+      originalText = sub.text;
+      translatedText = undefined;
+    }
+
+    const hasTranslation = translatedText !== undefined;
     
     if (translationPosition === 'above' && includeTranslation && hasTranslation) {
-      lines.push(normalizeSubtitleText(sub.translatedText!));
+      lines.push(normalizeSubtitleText(translatedText!));
     }
     
     if (includeOriginal) {
-      lines.push(normalizeSubtitleText(sub.text));
+      lines.push(normalizeSubtitleText(originalText));
     }
     
     if (translationPosition === 'below' && includeTranslation && hasTranslation) {
-      lines.push(normalizeSubtitleText(sub.translatedText!));
+      lines.push(normalizeSubtitleText(translatedText!));
     }
 
     lines.push('');
