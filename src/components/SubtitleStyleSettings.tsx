@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -25,7 +25,34 @@ export type FontFamily =
   | 'zcool-xiaowei'
   | 'lxgw-wenkai'
   | 'source-han-sans'
-  | 'source-han-serif';
+  | 'source-han-serif'
+  // English fonts
+  | 'inter'
+  | 'roboto'
+  | 'open-sans'
+  | 'montserrat'
+  | 'poppins'
+  | 'playfair-display'
+  | 'lora'
+  | 'oswald'
+  | 'raleway'
+  | 'ubuntu'
+  // Japanese fonts
+  | 'noto-sans-jp'
+  | 'noto-serif-jp'
+  | 'zen-kaku-gothic-new'
+  // Korean fonts
+  | 'noto-sans-kr'
+  | 'noto-serif-kr'
+  // Arabic fonts
+  | 'noto-sans-arabic'
+  | 'noto-naskh-arabic'
+  // Thai fonts
+  | 'noto-sans-thai'
+  // Hebrew fonts
+  | 'noto-sans-hebrew';
+
+export type SubtitleEffect = 'none' | 'typing' | 'scroll';
 
 export interface SubtitleStyle {
   fontSize: number;
@@ -63,17 +90,46 @@ export interface SubtitleStyle {
   translationTextShadowColor: string;
   translationTextShadowOffsetX: number;
   translationTextShadowOffsetY: number;
+  // Animation effects
+  effect: SubtitleEffect;
+  effectSpeed: number; // 1-10, where 5 is normal
 }
 
-export const fontFamilyOptions: { value: FontFamily; name: string; css: string }[] = [
-  { value: 'noto-sans-sc', name: '思源黑体', css: '"Noto Sans SC", sans-serif' },
-  { value: 'noto-serif-sc', name: '思源宋体', css: '"Noto Serif SC", serif' },
-  { value: 'ma-shan-zheng', name: '马山正楷', css: '"Ma Shan Zheng", cursive' },
-  { value: 'zcool-kuaile', name: 'ZCOOL快乐体', css: '"ZCOOL KuaiLe", cursive' },
-  { value: 'zcool-xiaowei', name: 'ZCOOL小薇体', css: '"ZCOOL XiaoWei", serif' },
-  { value: 'lxgw-wenkai', name: '霞鹜文楷', css: '"LXGW WenKai", cursive' },
-  { value: 'source-han-sans', name: '思源黑体Pro', css: '"Source Han Sans SC", sans-serif' },
-  { value: 'source-han-serif', name: '思源宋体Pro', css: '"Source Han Serif SC", serif' },
+export const fontFamilyOptions: { value: FontFamily; name: string; css: string; category: string }[] = [
+  // Chinese fonts
+  { value: 'noto-sans-sc', name: '思源黑体', css: '"Noto Sans SC", sans-serif', category: '中文' },
+  { value: 'noto-serif-sc', name: '思源宋体', css: '"Noto Serif SC", serif', category: '中文' },
+  { value: 'ma-shan-zheng', name: '马山正楷', css: '"Ma Shan Zheng", cursive', category: '中文' },
+  { value: 'zcool-kuaile', name: 'ZCOOL快乐体', css: '"ZCOOL KuaiLe", cursive', category: '中文' },
+  { value: 'zcool-xiaowei', name: 'ZCOOL小薇体', css: '"ZCOOL XiaoWei", serif', category: '中文' },
+  { value: 'lxgw-wenkai', name: '霞鹜文楷', css: '"LXGW WenKai", cursive', category: '中文' },
+  { value: 'source-han-sans', name: '思源黑体Pro', css: '"Source Han Sans SC", sans-serif', category: '中文' },
+  { value: 'source-han-serif', name: '思源宋体Pro', css: '"Source Han Serif SC", serif', category: '中文' },
+  // English fonts
+  { value: 'inter', name: 'Inter', css: '"Inter", sans-serif', category: 'English' },
+  { value: 'roboto', name: 'Roboto', css: '"Roboto", sans-serif', category: 'English' },
+  { value: 'open-sans', name: 'Open Sans', css: '"Open Sans", sans-serif', category: 'English' },
+  { value: 'montserrat', name: 'Montserrat', css: '"Montserrat", sans-serif', category: 'English' },
+  { value: 'poppins', name: 'Poppins', css: '"Poppins", sans-serif', category: 'English' },
+  { value: 'playfair-display', name: 'Playfair Display', css: '"Playfair Display", serif', category: 'English' },
+  { value: 'lora', name: 'Lora', css: '"Lora", serif', category: 'English' },
+  { value: 'oswald', name: 'Oswald', css: '"Oswald", sans-serif', category: 'English' },
+  { value: 'raleway', name: 'Raleway', css: '"Raleway", sans-serif', category: 'English' },
+  { value: 'ubuntu', name: 'Ubuntu', css: '"Ubuntu", sans-serif', category: 'English' },
+  // Japanese fonts
+  { value: 'noto-sans-jp', name: 'Noto Sans JP', css: '"Noto Sans JP", sans-serif', category: '日本語' },
+  { value: 'noto-serif-jp', name: 'Noto Serif JP', css: '"Noto Serif JP", serif', category: '日本語' },
+  { value: 'zen-kaku-gothic-new', name: 'Zen Kaku Gothic New', css: '"Zen Kaku Gothic New", sans-serif', category: '日本語' },
+  // Korean fonts
+  { value: 'noto-sans-kr', name: 'Noto Sans KR', css: '"Noto Sans KR", sans-serif', category: '한국어' },
+  { value: 'noto-serif-kr', name: 'Noto Serif KR', css: '"Noto Serif KR", serif', category: '한국어' },
+  // Arabic fonts
+  { value: 'noto-sans-arabic', name: 'Noto Sans Arabic', css: '"Noto Sans Arabic", sans-serif', category: 'العربية' },
+  { value: 'noto-naskh-arabic', name: 'Noto Naskh Arabic', css: '"Noto Naskh Arabic", serif', category: 'العربية' },
+  // Thai fonts
+  { value: 'noto-sans-thai', name: 'Noto Sans Thai', css: '"Noto Sans Thai", sans-serif', category: 'ไทย' },
+  // Hebrew fonts
+  { value: 'noto-sans-hebrew', name: 'Noto Sans Hebrew', css: '"Noto Sans Hebrew", sans-serif', category: 'עברית' },
 ];
 
 export const getFontFamilyCSS = (fontFamily: FontFamily): string => {
@@ -146,6 +202,9 @@ const defaultStyle: SubtitleStyle = {
   translationTextShadowColor: '#000000',
   translationTextShadowOffsetX: 1,
   translationTextShadowOffsetY: 1,
+  // Animation defaults
+  effect: 'none',
+  effectSpeed: 5,
 };
 
 const colorPresets = [
@@ -172,6 +231,58 @@ interface SubtitleStyleSettingsProps {
 
 export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = false }: SubtitleStyleSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
+  
+  // Animation preview state
+  const [animationKey, setAnimationKey] = useState(0);
+  const [displayText, setDisplayText] = useState('');
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const previewText = '这是字幕预览效果';
+  const animationRef = useRef<number>();
+
+  // Animation preview effect
+  useEffect(() => {
+    if (style.effect === 'none') {
+      setDisplayText(previewText);
+      setScrollOffset(0);
+      return;
+    }
+
+    const startTime = Date.now();
+    const duration = 3000; // 3 seconds for preview
+    const speedFactor = style.effectSpeed / 5;
+
+    const animate = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const adjustedElapsed = elapsed * speedFactor;
+
+      if (style.effect === 'typing') {
+        const typingDuration = 2;
+        const progress = Math.min(1, adjustedElapsed / typingDuration);
+        const charCount = Math.floor(previewText.length * progress);
+        setDisplayText(previewText.substring(0, charCount));
+        setScrollOffset(0);
+      } else if (style.effect === 'scroll') {
+        const scrollDuration = 1.5;
+        const progress = Math.min(1, adjustedElapsed / scrollDuration);
+        const easedProgress = 1 - Math.pow(1 - progress, 3);
+        setScrollOffset(100 * (1 - easedProgress));
+        setDisplayText(previewText);
+      }
+
+      if (elapsed < duration) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        // Reset animation
+        setTimeout(() => setAnimationKey(prev => prev + 1), 500);
+      }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [style.effect, style.effectSpeed, animationKey]);
 
   const updateStyle = (updates: Partial<SubtitleStyle>) => {
     onStyleChange({ ...style, ...updates });
@@ -275,12 +386,24 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                       <SelectTrigger className="bg-secondary border-border">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-card border-border z-50">
-                        {fontFamilyOptions.map((font) => (
-                          <SelectItem key={font.value} value={font.value} style={{ fontFamily: font.css }}>
-                            {font.name}
-                          </SelectItem>
-                        ))}
+                      <SelectContent className="bg-card border-border z-50 max-h-[300px]">
+                        {/* Group by category */}
+                        {['中文', 'English', '日本語', '한국어', 'العربية', 'ไทย', 'עברית'].map(category => {
+                          const fonts = fontFamilyOptions.filter(f => f.category === category);
+                          if (fonts.length === 0) return null;
+                          return (
+                            <div key={category}>
+                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-secondary/50 sticky top-0">
+                                {category}
+                              </div>
+                              {fonts.map((font) => (
+                                <SelectItem key={font.value} value={font.value} style={{ fontFamily: font.css }}>
+                                  {font.name}
+                                </SelectItem>
+                              ))}
+                            </div>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -432,12 +555,24 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
               <SelectTrigger className="bg-secondary border-border">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-card border-border z-50">
-                {fontFamilyOptions.map((font) => (
-                  <SelectItem key={font.value} value={font.value} style={{ fontFamily: font.css }}>
-                    {font.name}
-                  </SelectItem>
-                ))}
+              <SelectContent className="bg-card border-border z-50 max-h-[300px]">
+                {/* Group by category */}
+                {['中文', 'English', '日本語', '한국어', 'العربية', 'ไทย', 'עברית'].map(category => {
+                  const fonts = fontFamilyOptions.filter(f => f.category === category);
+                  if (fonts.length === 0) return null;
+                  return (
+                    <div key={category}>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-secondary/50 sticky top-0">
+                        {category}
+                      </div>
+                      {fonts.map((font) => (
+                        <SelectItem key={font.value} value={font.value} style={{ fontFamily: font.css }}>
+                          {font.name}
+                        </SelectItem>
+                      ))}
+                    </div>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -706,6 +841,46 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
             </Select>
           </div>
 
+          {/* Animation Effects */}
+          <div className="space-y-3 pt-3 border-t border-border">
+            <Label className="text-sm font-medium text-foreground">动画效果</Label>
+            
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">效果类型</Label>
+              <Select
+                value={style.effect}
+                onValueChange={(v) => updateStyle({ effect: v as SubtitleEffect })}
+              >
+                <SelectTrigger className="bg-secondary border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border z-50">
+                  <SelectItem value="none">无效果</SelectItem>
+                  <SelectItem value="typing">打字效果</SelectItem>
+                  <SelectItem value="scroll">滚动效果</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {style.effect !== 'none' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm text-muted-foreground">动画速度</Label>
+                  <span className="text-sm text-foreground">
+                    {style.effectSpeed <= 3 ? '慢' : style.effectSpeed <= 7 ? '中' : '快'}
+                  </span>
+                </div>
+                <Slider
+                  value={[style.effectSpeed]}
+                  min={1}
+                  max={10}
+                  step={1}
+                  onValueChange={(v) => updateStyle({ effectSpeed: v[0] })}
+                />
+              </div>
+            )}
+          </div>
+
           {/* Preview */}
           <div className="pt-2 border-t border-border">
             <Label className="text-sm text-muted-foreground mb-2 block">预览效果</Label>
@@ -733,9 +908,13 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                       color: style.fontColor,
                       fontSize: `${Math.min(style.fontSize, 16)}px`,
                       fontWeight: style.fontWeight === 'bold' ? 700 : style.fontWeight === 'medium' ? 500 : 400,
+                      transform: `translateX(${scrollOffset}%)`,
                     }}
                   >
-                    这是字幕预览效果
+                    {displayText}
+                    {style.effect === 'typing' && displayText.length < previewText.length && (
+                      <span className="animate-pulse">|</span>
+                    )}
                   </span>
                 </div>
               </div>

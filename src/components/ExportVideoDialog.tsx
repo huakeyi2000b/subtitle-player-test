@@ -304,7 +304,7 @@ export function ExportVideoDialog({
         // Draw subtitle
         const currentSubtitle = findSubtitleAtTime(subtitles, video.currentTime);
         if (currentSubtitle) {
-          drawSubtitleOnCanvas(ctx, currentSubtitle, subtitleStyle, outputWidth, outputHeight);
+          drawSubtitleOnCanvas(ctx, currentSubtitle, subtitleStyle, outputWidth, outputHeight, video.currentTime);
         }
 
         // Update progress

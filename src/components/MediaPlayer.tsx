@@ -7,12 +7,13 @@ import type { Subtitle } from '@/lib/subtitleParser';
 import type { TranslatedSubtitle } from '@/lib/translationService';
 import { SubtitleStyleSettings, defaultSubtitleStyle, getFontFamilyCSS, getTextEffectsCSS, removePunctuationFromText, type SubtitleStyle } from './SubtitleStyleSettings';
 import { normalizeSubtitleText } from '@/lib/transcriptionService';
+import { useSubtitleEffect } from '@/hooks/useSubtitleEffect';
 
 // Function to split bilingual text (same as in SubtitleList)
 function splitBilingualText(text: string): { original: string; translated: string } | null {
   const chineseRegex = /[\u4e00-\u9fa5]/;
   const englishRegex = /[a-zA-Z]/;
-  
+
   if (chineseRegex.test(text) && englishRegex.test(text)) {
     // Pattern 1: Chinese text followed by English
     const pattern1 = /^([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)\s*([a-zA-Z\s,.'!?;:()"-]+)$/;
@@ -23,7 +24,7 @@ function splitBilingualText(text: string): { original: string; translated: strin
         translated: match1[2].trim()
       };
     }
-    
+
     // Pattern 2: English followed by Chinese
     const pattern2 = /^([a-zA-Z\s,.'!?;:()"-]+)\s*([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)$/;
     const match2 = text.match(pattern2);
@@ -33,13 +34,13 @@ function splitBilingualText(text: string): { original: string; translated: strin
         translated: match2[1].trim()
       };
     }
-    
+
     // Pattern 3: Try to split by sentence boundaries
     const sentences = text.split(/[.!?。！？]\s+/);
     if (sentences.length >= 2) {
       const firstPart = sentences[0];
       const secondPart = sentences.slice(1).join(' ');
-      
+
       if (chineseRegex.test(firstPart) && englishRegex.test(secondPart)) {
         return {
           original: firstPart.trim(),
@@ -53,7 +54,7 @@ function splitBilingualText(text: string): { original: string; translated: strin
       }
     }
   }
-  
+
   return null;
 }
 
@@ -210,23 +211,48 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
 
   const MediaElement = type === 'video' ? 'video' : 'audio';
 
+  // Get subtitle duration for animation calculations
+  const subtitleDuration = currentSubtitle ? currentSubtitle.endTime - currentSubtitle.startTime : 0;
+
   // Render subtitle text based on style settings
   const renderSubtitleContent = () => {
     if (!currentSubtitle) return null;
 
     // Check if subtitle has translatedText field (from translation feature)
     const hasTranslatedField = hasTranslatedText;
-    
+
     if (hasTranslatedField) {
       // Use existing logic for translated subtitles
-      let originalText = normalizeSubtitleText(currentSubtitle.text);
-      let translatedText = normalizeSubtitleText((currentSubtitle as TranslatedSubtitle).translatedText!);
-      
+      let originalTextRaw = normalizeSubtitleText(currentSubtitle.text);
+      let translatedTextRaw = normalizeSubtitleText((currentSubtitle as TranslatedSubtitle).translatedText!);
+
       // Apply punctuation removal if enabled
       if (subtitleStyle.removePunctuation) {
-        originalText = removePunctuationFromText(originalText);
-        translatedText = removePunctuationFromText(translatedText);
+        originalTextRaw = removePunctuationFromText(originalTextRaw);
+        translatedTextRaw = removePunctuationFromText(translatedTextRaw);
       }
+
+      // Calculate animation effects
+      const originalEffect = useSubtitleEffect({
+        text: originalTextRaw,
+        effect: subtitleStyle.effect,
+        effectSpeed: subtitleStyle.effectSpeed,
+        subtitleStartTime: currentSubtitle.startTime,
+        currentTime,
+        subtitleDuration,
+      });
+
+      const translatedEffect = useSubtitleEffect({
+        text: translatedTextRaw,
+        effect: subtitleStyle.effect,
+        effectSpeed: subtitleStyle.effectSpeed,
+        subtitleStartTime: currentSubtitle.startTime,
+        currentTime,
+        subtitleDuration,
+      });
+
+      const originalText = originalEffect.displayText;
+      const translatedText = translatedEffect.displayText;
 
       const showOriginal = subtitleStyle.showOriginal;
       const showTranslation = subtitleStyle.showTranslation;
@@ -238,6 +264,8 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         fontSize: `${subtitleStyle.fontSize}px`,
         fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
         fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+        transform: subtitleStyle.effect === 'scroll' ? `translateX(${originalEffect.scrollOffset}%)` : undefined,
+        transition: subtitleStyle.effect === 'scroll' ? 'transform 0.05s linear' : undefined,
         ...getTextEffectsCSS(subtitleStyle, false),
       };
 
@@ -246,6 +274,8 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         fontSize: `${subtitleStyle.translationFontSize}px`,
         fontWeight: subtitleStyle.translationFontWeight === 'bold' ? 700 : subtitleStyle.translationFontWeight === 'medium' ? 500 : 400,
         fontFamily: getFontFamilyCSS(subtitleStyle.translationFontFamily),
+        transform: subtitleStyle.effect === 'scroll' ? `translateX(${translatedEffect.scrollOffset}%)` : undefined,
+        transition: subtitleStyle.effect === 'scroll' ? 'transform 0.05s linear' : undefined,
         ...getTextEffectsCSS(subtitleStyle, true),
       };
 
@@ -257,25 +287,41 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
       const secondStyle = shouldSwapOrder ? originalStyle : translationStyle;
 
       return (
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-1 overflow-hidden">
           {showOriginal && showTranslation && (
             <>
-              <p className="text-center leading-relaxed" style={firstStyle}>
+              <p className="text-center leading-relaxed whitespace-nowrap" style={firstStyle}>
                 {firstText}
+                {subtitleStyle.effect === 'typing' && (
+                  shouldSwapOrder ?
+                    (translatedEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                    (originalEffect.isAnimating && <span className="animate-pulse">|</span>)
+                )}
               </p>
-              <p className="text-center leading-relaxed" style={secondStyle}>
+              <p className="text-center leading-relaxed whitespace-nowrap" style={secondStyle}>
                 {secondText}
+                {subtitleStyle.effect === 'typing' && (
+                  shouldSwapOrder ?
+                    (originalEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                    (translatedEffect.isAnimating && <span className="animate-pulse">|</span>)
+                )}
               </p>
             </>
           )}
           {showOriginal && !showTranslation && (
-            <p className="text-center leading-relaxed" style={originalStyle}>
+            <p className="text-center leading-relaxed whitespace-nowrap" style={originalStyle}>
               {originalText}
+              {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
+                <span className="animate-pulse">|</span>
+              )}
             </p>
           )}
           {!showOriginal && showTranslation && (
-            <p className="text-center leading-relaxed" style={translationStyle}>
+            <p className="text-center leading-relaxed whitespace-nowrap" style={translationStyle}>
               {translatedText}
+              {subtitleStyle.effect === 'typing' && translatedEffect.isAnimating && (
+                <span className="animate-pulse">|</span>
+              )}
             </p>
           )}
         </div>
@@ -283,14 +329,47 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
     } else {
       // Try to split mixed bilingual text
       const splitResult = splitBilingualText(currentSubtitle.text);
-      
+
       if (splitResult) {
+        // Apply punctuation removal if enabled
+        let originalTextRaw = splitResult.original;
+        let translatedTextRaw = splitResult.translated;
+
+        if (subtitleStyle.removePunctuation) {
+          originalTextRaw = removePunctuationFromText(normalizeSubtitleText(originalTextRaw));
+          translatedTextRaw = removePunctuationFromText(normalizeSubtitleText(translatedTextRaw));
+        } else {
+          originalTextRaw = normalizeSubtitleText(originalTextRaw);
+          translatedTextRaw = normalizeSubtitleText(translatedTextRaw);
+        }
+
+        // Calculate animation effects
+        const originalEffect = useSubtitleEffect({
+          text: originalTextRaw,
+          effect: subtitleStyle.effect,
+          effectSpeed: subtitleStyle.effectSpeed,
+          subtitleStartTime: currentSubtitle.startTime,
+          currentTime,
+          subtitleDuration,
+        });
+
+        const translatedEffect = useSubtitleEffect({
+          text: translatedTextRaw,
+          effect: subtitleStyle.effect,
+          effectSpeed: subtitleStyle.effectSpeed,
+          subtitleStartTime: currentSubtitle.startTime,
+          currentTime,
+          subtitleDuration,
+        });
+
         // Display as bilingual with split text
         const originalStyle: React.CSSProperties = {
           color: subtitleStyle.fontColor,
           fontSize: `${subtitleStyle.fontSize}px`,
           fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
           fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+          transform: subtitleStyle.effect === 'scroll' ? `translateX(${originalEffect.scrollOffset}%)` : undefined,
+          transition: subtitleStyle.effect === 'scroll' ? 'transform 0.05s linear' : undefined,
           ...getTextEffectsCSS(subtitleStyle, false),
         };
 
@@ -299,45 +378,73 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           fontSize: `${subtitleStyle.translationFontSize}px`,
           fontWeight: subtitleStyle.translationFontWeight === 'bold' ? 700 : subtitleStyle.translationFontWeight === 'medium' ? 500 : 400,
           fontFamily: getFontFamilyCSS(subtitleStyle.translationFontFamily),
+          transform: subtitleStyle.effect === 'scroll' ? `translateX(${translatedEffect.scrollOffset}%)` : undefined,
+          transition: subtitleStyle.effect === 'scroll' ? 'transform 0.05s linear' : undefined,
           ...getTextEffectsCSS(subtitleStyle, true),
         };
 
         // Determine display order based on swapBilingualOrder
-        const firstText = swapBilingualOrder ? splitResult.translated : splitResult.original;
-        const secondText = swapBilingualOrder ? splitResult.original : splitResult.translated;
+        const firstText = swapBilingualOrder ? translatedEffect.displayText : originalEffect.displayText;
+        const secondText = swapBilingualOrder ? originalEffect.displayText : translatedEffect.displayText;
         const firstStyle = swapBilingualOrder ? translationStyle : originalStyle;
         const secondStyle = swapBilingualOrder ? originalStyle : translationStyle;
 
         return (
-          <div className="flex flex-col items-center gap-1">
-            <p className="text-center leading-relaxed" style={firstStyle}>
-              {subtitleStyle.removePunctuation ? removePunctuationFromText(normalizeSubtitleText(firstText)) : normalizeSubtitleText(firstText)}
+          <div className="flex flex-col items-center gap-1 overflow-hidden">
+            <p className="text-center leading-relaxed whitespace-nowrap" style={firstStyle}>
+              {firstText}
+              {subtitleStyle.effect === 'typing' && (
+                swapBilingualOrder ?
+                  (translatedEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                  (originalEffect.isAnimating && <span className="animate-pulse">|</span>)
+              )}
             </p>
-            <p className="text-center leading-relaxed" style={secondStyle}>
-              {subtitleStyle.removePunctuation ? removePunctuationFromText(normalizeSubtitleText(secondText)) : normalizeSubtitleText(secondText)}
+            <p className="text-center leading-relaxed whitespace-nowrap" style={secondStyle}>
+              {secondText}
+              {subtitleStyle.effect === 'typing' && (
+                swapBilingualOrder ?
+                  (originalEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                  (translatedEffect.isAnimating && <span className="animate-pulse">|</span>)
+              )}
             </p>
           </div>
         );
       } else {
         // Display as single line if no bilingual pattern detected
-        let originalText = normalizeSubtitleText(currentSubtitle.text);
-        
+        let originalTextRaw = normalizeSubtitleText(currentSubtitle.text);
+
         // Apply punctuation removal if enabled
         if (subtitleStyle.removePunctuation) {
-          originalText = removePunctuationFromText(originalText);
+          originalTextRaw = removePunctuationFromText(originalTextRaw);
         }
+
+        // Calculate animation effects
+        const originalEffect = useSubtitleEffect({
+          text: originalTextRaw,
+          effect: subtitleStyle.effect,
+          effectSpeed: subtitleStyle.effectSpeed,
+          subtitleStartTime: currentSubtitle.startTime,
+          currentTime,
+          subtitleDuration,
+        });
+
         const originalStyle: React.CSSProperties = {
           color: subtitleStyle.fontColor,
           fontSize: `${subtitleStyle.fontSize}px`,
           fontWeight: subtitleStyle.fontWeight === 'bold' ? 700 : subtitleStyle.fontWeight === 'medium' ? 500 : 400,
           fontFamily: getFontFamilyCSS(subtitleStyle.fontFamily),
+          transform: subtitleStyle.effect === 'scroll' ? `translateX(${originalEffect.scrollOffset}%)` : undefined,
+          transition: subtitleStyle.effect === 'scroll' ? 'transform 0.05s linear' : undefined,
           ...getTextEffectsCSS(subtitleStyle, false),
         };
 
         return (
-          <div className="flex flex-col items-center">
-            <p className="text-center leading-relaxed" style={originalStyle}>
-              {originalText}
+          <div className="flex flex-col items-center gap-1 overflow-hidden">
+            <p className="text-center leading-relaxed whitespace-nowrap" style={originalStyle}>
+              {originalEffect.displayText}
+              {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
+                <span className="animate-pulse">|</span>
+              )}
             </p>
           </div>
         );
@@ -361,14 +468,14 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           preload="metadata"
           style={{ pointerEvents: 'none' }}
         />
-        
+
         {/* Overlay to prevent direct media interaction */}
-        <div 
+        <div
           className="absolute inset-0 z-10 cursor-pointer"
           onClick={onPlayPause}
           onDoubleClick={(e) => e.preventDefault()}
         />
-        
+
         {type === 'audio' && (
           <div className="flex flex-col items-center justify-center gap-4 p-8">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center animate-pulse-slow">
@@ -377,17 +484,16 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
             <p className="text-lg font-medium text-foreground">音频播放中</p>
           </div>
         )}
-        
+
         {/* Subtitle overlay */}
         {currentSubtitle && (subtitleStyle.showOriginal || (subtitleStyle.showTranslation && hasTranslatedText)) && (
-          <div 
-            className={`absolute left-0 right-0 flex justify-center px-4 z-20 ${
-              subtitleStyle.position === 'top' ? 'top-4' : 
-              subtitleStyle.position === 'center' ? 'top-1/2 -translate-y-1/2' : 
-              'bottom-4'
-            }`}
+          <div
+            className={`absolute left-0 right-0 flex justify-center px-4 z-20 ${subtitleStyle.position === 'top' ? 'top-4' :
+              subtitleStyle.position === 'center' ? 'top-1/2 -translate-y-1/2' :
+                'bottom-4'
+              }`}
           >
-            <div 
+            <div
               className="px-6 py-3 backdrop-blur-sm rounded-lg max-w-[80%]"
               style={{
                 backgroundColor: `${subtitleStyle.backgroundColor}${Math.round(subtitleStyle.backgroundOpacity * 2.55).toString(16).padStart(2, '0')}`,
@@ -398,7 +504,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           </div>
         )}
       </div>
-      
+
       {/* Controls */}
       <div className="p-4 space-y-4 bg-card/50">
         {/* Progress bar */}
@@ -415,7 +521,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
             <span>{formatTimeShort(duration)}</span>
           </div>
         </div>
-        
+
         {/* Control buttons */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -427,7 +533,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
             >
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
             </Button>
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -436,7 +542,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
             >
               {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
             </Button>
-            
+
             <div className="w-24">
               <Slider
                 value={[isMuted ? 0 : volume]}
@@ -446,7 +552,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
               />
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
             {/* Bilingual order swap button */}
             {hasBilingualContent && (
@@ -460,7 +566,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
                 <ArrowUpDown className="w-5 h-5" />
               </Button>
             )}
-            
+
             {onSubtitleStyleChange && (
               <SubtitleStyleSettings
                 style={subtitleStyle}
@@ -468,7 +574,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
                 hasTranslation={hasTranslation}
               />
             )}
-            
+
             {type === 'video' && (
               <Button
                 variant="ghost"

@@ -2,6 +2,7 @@ import type { TranslatedSubtitle } from './translationService';
 import type { SubtitleStyle } from '@/components/SubtitleStyleSettings';
 import { getFontFamilyCSS, getTextEffectsCSS, removePunctuationFromText } from '@/components/SubtitleStyleSettings';
 import { normalizeSubtitleText } from './transcriptionService';
+import { getAnimatedTextForCanvas } from '@/hooks/useSubtitleEffect';
 
 // Function to split bilingual text (same as in MediaPlayer and SubtitleList)
 function splitBilingualText(text: string): { original: string; translated: string } | null {
@@ -79,7 +80,8 @@ export function drawSubtitleOnCanvas(
   subtitle: TranslatedSubtitle | null,
   style: SubtitleStyle,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
+  currentTime?: number
 ): void {
   if (!subtitle) return;
 
@@ -93,12 +95,61 @@ export function drawSubtitleOnCanvas(
 
   if (!showOriginal && !showTranslation) return;
 
+  // Calculate animation state if currentTime is provided
+  const subtitleDuration = subtitle.endTime - subtitle.startTime;
+  const elapsedTime = currentTime ? Math.max(0, currentTime - subtitle.startTime) : subtitleDuration;
+
+  // Determine original and translated text
+  let originalTextRaw: string;
+  let translatedTextRaw: string | undefined;
+
+  if (hasTranslatedText) {
+    // Use translatedText field
+    originalTextRaw = subtitle.text;
+    translatedTextRaw = subtitle.translatedText;
+  } else if (splitResult) {
+    // Use split bilingual text
+    originalTextRaw = splitResult.original;
+    translatedTextRaw = splitResult.translated;
+  } else {
+    // Only original text
+    originalTextRaw = subtitle.text;
+    translatedTextRaw = undefined;
+  }
+
+  // Apply text processing
+  let originalText = normalizeSubtitleText(originalTextRaw);
+  let translatedText = translatedTextRaw ? normalizeSubtitleText(translatedTextRaw) : undefined;
+
+  if (style.removePunctuation) {
+    originalText = removePunctuationFromText(originalText);
+    if (translatedText) {
+      translatedText = removePunctuationFromText(translatedText);
+    }
+  }
+
+  // Apply animation effects
+  const originalAnimated = getAnimatedTextForCanvas(
+    originalText,
+    style.effect,
+    style.effectSpeed,
+    elapsedTime,
+    subtitleDuration
+  );
+  const translatedAnimated = translatedText ? getAnimatedTextForCanvas(
+    translatedText,
+    style.effect,
+    style.effectSpeed,
+    elapsedTime,
+    subtitleDuration
+  ) : { displayText: '', scrollOffset: 0 };
+
   // Calculate position
   const padding = 20;
   const lineHeight = 1.4;
   let yPosition: number;
 
-  // Prepare text lines
+  // Prepare text lines with animation
   const lines: Array<{ 
     text: string; 
     fontSize: number; 
@@ -106,70 +157,44 @@ export function drawSubtitleOnCanvas(
     fontWeight: number; 
     fontFamily: string;
     isTranslation: boolean;
+    scrollOffset?: number;
   }> = [];
   
   const isTranslationAbove = style.translationPosition === 'above';
 
-  // Determine original and translated text
-  let originalText: string;
-  let translatedText: string | undefined;
-
-  if (hasTranslatedText) {
-    // Use translatedText field
-    originalText = subtitle.text;
-    translatedText = subtitle.translatedText;
-  } else if (splitResult) {
-    // Use split bilingual text
-    originalText = splitResult.original;
-    translatedText = splitResult.translated;
-  } else {
-    // Only original text
-    originalText = subtitle.text;
-    translatedText = undefined;
-  }
-
   if (isTranslationAbove && showTranslation && translatedText) {
-    let processedText = normalizeSubtitleText(translatedText);
-    if (style.removePunctuation) {
-      processedText = removePunctuationFromText(processedText);
-    }
     lines.push({
-      text: processedText,
+      text: translatedAnimated.displayText,
       fontSize: style.translationFontSize * 2, // 乘以2倍
       color: style.translationFontColor,
       fontWeight: getFontWeight(style.translationFontWeight),
       fontFamily: getFontFamilyCSS(style.translationFontFamily),
       isTranslation: true,
+      scrollOffset: translatedAnimated.scrollOffset,
     });
   }
 
   if (showOriginal) {
-    let processedText = normalizeSubtitleText(originalText);
-    if (style.removePunctuation) {
-      processedText = removePunctuationFromText(processedText);
-    }
     lines.push({
-      text: processedText,
+      text: originalAnimated.displayText,
       fontSize: style.fontSize * 2, // 乘以2倍
       color: style.fontColor,
       fontWeight: getFontWeight(style.fontWeight),
       fontFamily: getFontFamilyCSS(style.fontFamily),
       isTranslation: false,
+      scrollOffset: originalAnimated.scrollOffset,
     });
   }
 
   if (!isTranslationAbove && showTranslation && translatedText) {
-    let processedText = normalizeSubtitleText(translatedText);
-    if (style.removePunctuation) {
-      processedText = removePunctuationFromText(processedText);
-    }
     lines.push({
-      text: processedText,
+      text: translatedAnimated.displayText,
       fontSize: style.translationFontSize * 2, // 乘以2倍
       color: style.translationFontColor,
       fontWeight: getFontWeight(style.translationFontWeight),
       fontFamily: getFontFamilyCSS(style.translationFontFamily),
       isTranslation: true,
+      scrollOffset: translatedAnimated.scrollOffset,
     });
   }
 
@@ -211,7 +236,7 @@ export function drawSubtitleOnCanvas(
   ctx.roundRect(bgX, bgY, bgWidth, bgHeight, 8);
   ctx.fill();
 
-  // Draw text lines
+  // Draw text lines with animation
   let currentY = bgY + 15;
   
   lines.forEach((line, i) => {
@@ -220,7 +245,13 @@ export function drawSubtitleOnCanvas(
     ctx.textBaseline = 'top';
     
     const textY = currentY;
-    const textX = canvasWidth / 2;
+    // Calculate x position with scroll offset
+    let textX = canvasWidth / 2;
+    if (line.scrollOffset && line.scrollOffset > 0) {
+      // Apply scroll effect: scrollOffset 100 = fully right (off screen), 0 = centered
+      const scrollDistance = canvasWidth * (line.scrollOffset / 100);
+      textX = canvasWidth / 2 + scrollDistance;
+    }
     
     // Apply text effects based on style
     const textStroke = line.isTranslation ? style.translationTextStroke : style.textStroke;

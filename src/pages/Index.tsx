@@ -468,8 +468,8 @@ const Index = () => {
             <div className="space-y-4">
               {/* Top row: MediaPlayer and SubtitleList */}
               <div className="grid lg:grid-cols-3 gap-6 items-stretch">
-                {/* Player */}
-                <div className="lg:col-span-2">
+                {/* Player - prioritize on mobile */}
+                <div className="lg:col-span-2 order-1">
                   <MediaPlayer
                     ref={playerRef}
                     src={mediaFile.url}
@@ -486,8 +486,8 @@ const Index = () => {
                   />
                 </div>
 
-                {/* Subtitle list - same height as MediaPlayer only */}
-                <div className="lg:col-span-1">
+                {/* Subtitle list - show after player on mobile */}
+                <div className="lg:col-span-1 order-3 lg:order-2">
                   <SubtitleList
                     subtitles={subtitles}
                     currentTime={currentTime}
@@ -495,6 +495,7 @@ const Index = () => {
                     onEdit={handleEditSubtitle}
                     onInsert={handleInsert}
                     onCopy={handleCopy}
+                    onPaste={handlePaste}
                     onDelete={handleDelete}
                     selectedSubtitleId={selectedSubtitleId}
                     onSelectSubtitle={setSelectedSubtitleId}
@@ -502,13 +503,14 @@ const Index = () => {
                     onRedo={redo}
                     canUndo={canUndo}
                     canRedo={canRedo}
+                    hasClipboard={!!clipboard}
                   />
                 </div>
               </div>
 
               {/* Bottom row: Timeline - same width as MediaPlayer */}
               <div className="grid lg:grid-cols-3 gap-6 items-stretch">
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 order-2 lg:order-1">
                   <Timeline
                     subtitles={subtitles}
                     duration={duration}
@@ -528,7 +530,7 @@ const Index = () => {
                     onSelectSubtitle={setSelectedSubtitleId}
                   />
                 </div>
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 order-4 lg:order-2">
                   {/* Image card */}
                   <div className="glass-card overflow-hidden h-40">
                     <img

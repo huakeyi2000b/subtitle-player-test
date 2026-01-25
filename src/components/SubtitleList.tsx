@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Clock, Edit3, Plus, Copy, Minus, Undo2, Redo2, ArrowUpDown } from 'lucide-react';
+import { Clock, Edit3, Plus, Copy, Clipboard, Minus, Undo2, Redo2, ArrowUpDown } from 'lucide-react';
 import { formatTime } from '@/lib/subtitleParser';
 import type { Subtitle } from '@/lib/subtitleParser';
 import type { TranslatedSubtitle } from '@/lib/translationService';
@@ -67,6 +67,7 @@ interface SubtitleListProps {
   onEdit: (subtitle: Subtitle | TranslatedSubtitle) => void;
   onInsert?: (afterTime: number) => void;
   onCopy?: (subtitle: Subtitle | TranslatedSubtitle) => void;
+  onPaste?: (afterId?: number) => void;
   onDelete?: (id: number) => void;
   selectedSubtitleId?: number | null;
   onSelectSubtitle?: (id: number | null) => void;
@@ -74,6 +75,7 @@ interface SubtitleListProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  hasClipboard?: boolean;
 }
 
 export function SubtitleList({
@@ -83,6 +85,7 @@ export function SubtitleList({
   onEdit,
   onInsert,
   onCopy,
+  onPaste,
   onDelete,
   selectedSubtitleId,
   onSelectSubtitle,
@@ -90,6 +93,7 @@ export function SubtitleList({
   onRedo,
   canUndo = false,
   canRedo = false,
+  hasClipboard = false,
 }: SubtitleListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLDivElement>(null);
@@ -107,17 +111,35 @@ export function SubtitleList({
     sub => currentTime >= sub.startTime && currentTime <= sub.endTime
   );
 
-  // Auto-scroll to active subtitle
+  // Auto-scroll to active subtitle without stealing focus
   useEffect(() => {
     if (activeRef.current && listRef.current) {
       const container = listRef.current;
       const element = activeRef.current;
-      const containerRect = container.getBoundingClientRect();
-      const elementRect = element.getBoundingClientRect();
-
-      if (elementRect.top < containerRect.top || elementRect.bottom > containerRect.bottom) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      
+      // Use requestAnimationFrame to ensure smooth scrolling without focus issues
+      requestAnimationFrame(() => {
+        const containerRect = container.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        
+        // Only scroll if element is not visible
+        if (elementRect.top < containerRect.top || elementRect.bottom > containerRect.bottom) {
+          // Calculate scroll position manually to avoid focus stealing
+          const containerScrollTop = container.scrollTop;
+          const elementOffsetTop = element.offsetTop;
+          const containerHeight = container.clientHeight;
+          const elementHeight = element.clientHeight;
+          
+          // Center the element in the container
+          const targetScrollTop = elementOffsetTop - (containerHeight / 2) + (elementHeight / 2);
+          
+          // Smooth scroll using scrollTo instead of scrollIntoView
+          container.scrollTo({
+            top: Math.max(0, targetScrollTop),
+            behavior: 'smooth'
+          });
+        }
+      });
     }
   }, [activeSubtitle?.id]);
 
@@ -383,6 +405,24 @@ export function SubtitleList({
                               </button>
                             </TooltipTrigger>
                             <TooltipContent>复制</TooltipContent>
+                          </Tooltip>
+                        )}
+
+                        {onPaste && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onPaste(subtitle.id);
+                                }}
+                                disabled={!hasClipboard}
+                                className="p-1 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <Clipboard className="w-3 h-3" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>粘贴到后面</TooltipContent>
                           </Tooltip>
                         )}
 
