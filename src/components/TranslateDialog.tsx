@@ -86,7 +86,13 @@ export function TranslateDialog({ isOpen, onClose, subtitles, onTranslated }: Tr
               <SelectTrigger className="bg-secondary border-border">
                 <SelectValue placeholder="自动检测" />
               </SelectTrigger>
-              <SelectContent side="bottom" className="bg-card border-border z-[100]">
+              <SelectContent 
+                side="bottom" 
+                align="start"
+                sideOffset={4}
+                avoidCollisions={false}
+                className="bg-card border-border z-[100] max-h-[200px] overflow-y-auto"
+              >
                 <SelectItem value="auto">自动检测</SelectItem>
                 {TRANSLATION_LANGUAGES.map((lang) => (
                   <SelectItem key={lang.code} value={lang.code}>
@@ -104,7 +110,13 @@ export function TranslateDialog({ isOpen, onClose, subtitles, onTranslated }: Tr
               <SelectTrigger className="bg-secondary border-border">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent side="bottom" className="bg-card border-border z-[100]">
+              <SelectContent 
+                side="bottom" 
+                align="start"
+                sideOffset={4}
+                avoidCollisions={false}
+                className="bg-card border-border z-[100] max-h-[200px] overflow-y-auto"
+              >
                 {TRANSLATION_LANGUAGES.map((lang) => (
                   <SelectItem key={lang.code} value={lang.code}>
                     {lang.name}
