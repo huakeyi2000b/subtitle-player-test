@@ -8,48 +8,119 @@ import { getAnimatedTextForCanvas } from '@/hooks/useSubtitleEffect';
 function splitBilingualText(text: string): { original: string; translated: string } | null {
   const chineseRegex = /[\u4e00-\u9fa5]/;
   const englishRegex = /[a-zA-Z]/;
+  const koreanRegex = /[\uac00-\ud7af]/;
+  const japaneseRegex = /[\u3040-\u309f\u30a0-\u30ff]/;
+  const arabicRegex = /[\u0600-\u06ff]/;
+  const russianRegex = /[\u0400-\u04ff]/;
+  const thaiRegex = /[\u0e00-\u0e7f]/;
+  const vietnameseRegex = /[\u1ea0-\u1ef9]/;
+
+  // Define language detection functions
+  const hasLanguage = (text: string, regex: RegExp) => regex.test(text);
   
-  if (chineseRegex.test(text) && englishRegex.test(text)) {
-    // Pattern 1: Chinese text followed by English
-    const pattern1 = /^([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)\s*([a-zA-Z\s,.'!?;:()"-]+)$/;
-    const match1 = text.match(pattern1);
-    if (match1) {
+  const languages = [
+    { name: 'chinese', regex: chineseRegex, punctuation: '，。！？；：、""\'\'（）【】' },
+    { name: 'english', regex: englishRegex, punctuation: ',.\'!?;:()"-' },
+    { name: 'korean', regex: koreanRegex, punctuation: '，。！？；：、""\'\'（）【】' },
+    { name: 'japanese', regex: japaneseRegex, punctuation: '，。！？；：、""\'\'（）【】' },
+    { name: 'arabic', regex: arabicRegex, punctuation: '،.!?;:()"-' },
+    { name: 'russian', regex: russianRegex, punctuation: ',.!?;:()"-' },
+    { name: 'thai', regex: thaiRegex, punctuation: ',.!?;:()"-' },
+    { name: 'vietnamese', regex: vietnameseRegex, punctuation: ',.!?;:()"-' }
+  ];
+
+  // Find which languages are present in the text
+  const presentLanguages = languages.filter(lang => hasLanguage(text, lang.regex));
+  
+  // Only proceed if exactly 2 languages are detected
+  if (presentLanguages.length !== 2) {
+    return null;
+  }
+
+  const [lang1, lang2] = presentLanguages;
+  
+  // Create regex patterns for each language with their punctuation
+  const createLanguagePattern = (lang: typeof lang1) => {
+    const unicodeRange = lang.regex.source.slice(1, -1); // Remove [ and ]
+    const escapedPunctuation = lang.punctuation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return `[${unicodeRange}\\s${escapedPunctuation}]+`;
+  };
+  
+  const lang1Pattern = createLanguagePattern(lang1);
+  const lang2Pattern = createLanguagePattern(lang2);
+  
+  // Pattern 1: First language followed by second language
+  const pattern1 = new RegExp(`^(${lang1Pattern})\\s*(${lang2Pattern})$`);
+  const match1 = text.match(pattern1);
+  if (match1) {
+    return {
+      original: match1[1].trim(),
+      translated: match1[2].trim()
+    };
+  }
+
+  // Pattern 2: Second language followed by first language
+  const pattern2 = new RegExp(`^(${lang2Pattern})\\s*(${lang1Pattern})$`);
+  const match2 = text.match(pattern2);
+  if (match2) {
+    return {
+      original: match2[2].trim(),
+      translated: match2[1].trim()
+    };
+  }
+
+  // Pattern 3: Try to split by sentence boundaries
+  const sentences = text.split(/[.!?。！？]\s+/);
+  if (sentences.length >= 2) {
+    const firstPart = sentences[0];
+    const secondPart = sentences.slice(1).join(' ');
+
+    const firstHasLang1 = hasLanguage(firstPart, lang1.regex);
+    const firstHasLang2 = hasLanguage(firstPart, lang2.regex);
+    const secondHasLang1 = hasLanguage(secondPart, lang1.regex);
+    const secondHasLang2 = hasLanguage(secondPart, lang2.regex);
+
+    if (firstHasLang1 && !firstHasLang2 && secondHasLang2 && !secondHasLang1) {
       return {
-        original: match1[1].trim(),
-        translated: match1[2].trim()
+        original: firstPart.trim(),
+        translated: secondPart.trim()
+      };
+    } else if (firstHasLang2 && !firstHasLang1 && secondHasLang1 && !secondHasLang2) {
+      return {
+        original: secondPart.trim(),
+        translated: firstPart.trim()
       };
     }
-    
-    // Pattern 2: English followed by Chinese
-    const pattern2 = /^([a-zA-Z\s,.'!?;:()"-]+)\s*([\u4e00-\u9fa5\s，。！？；：、""''（）【】]+)$/;
-    const match2 = text.match(pattern2);
-    if (match2) {
-      return {
-        original: match2[2].trim(),
-        translated: match2[1].trim()
-      };
-    }
-    
-    // Pattern 3: Try to split by sentence boundaries
-    const sentences = text.split(/[.!?。！？]\s+/);
-    if (sentences.length >= 2) {
-      const firstPart = sentences[0];
-      const secondPart = sentences.slice(1).join(' ');
-      
-      if (chineseRegex.test(firstPart) && englishRegex.test(secondPart)) {
-        return {
-          original: firstPart.trim(),
-          translated: secondPart.trim()
-        };
-      } else if (englishRegex.test(firstPart) && chineseRegex.test(secondPart)) {
-        return {
-          original: secondPart.trim(),
-          translated: firstPart.trim()
-        };
+  }
+
+  // Pattern 4: Try splitting by common separators
+  const separators = [' - ', ' | ', ' / ', '\n', '  '];
+  for (const separator of separators) {
+    if (text.includes(separator)) {
+      const parts = text.split(separator);
+      if (parts.length === 2) {
+        const [part1, part2] = parts.map(p => p.trim());
+        
+        const part1HasLang1 = hasLanguage(part1, lang1.regex);
+        const part1HasLang2 = hasLanguage(part1, lang2.regex);
+        const part2HasLang1 = hasLanguage(part2, lang1.regex);
+        const part2HasLang2 = hasLanguage(part2, lang2.regex);
+
+        if (part1HasLang1 && !part1HasLang2 && part2HasLang2 && !part2HasLang1) {
+          return {
+            original: part1,
+            translated: part2
+          };
+        } else if (part1HasLang2 && !part1HasLang1 && part2HasLang1 && !part2HasLang2) {
+          return {
+            original: part2,
+            translated: part1
+          };
+        }
       }
     }
   }
-  
+
   return null;
 }
 
