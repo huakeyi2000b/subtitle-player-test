@@ -128,24 +128,17 @@ export function getAnimatedTextForCanvas(
   elapsedTime: number,
   subtitleDuration: number
 ): { displayText: string; scrollOffset: number } {
-  // Debug logging
-  if (effect !== 'none' && text) {
-    console.log(`Animation Debug - Text: "${text}", Effect: ${effect}, Speed: ${effectSpeed}, Elapsed: ${elapsedTime.toFixed(2)}s, Duration: ${subtitleDuration.toFixed(2)}s`);
-  }
-
   if (effect === 'none' || !text) {
     return { displayText: text, scrollOffset: 0 };
   }
 
   if (effect === 'typing') {
     const { displayText } = calculateTypingEffect(text, elapsedTime, effectSpeed, subtitleDuration);
-    console.log(`Typing result: "${displayText}"`);
     return { displayText, scrollOffset: 0 };
   }
 
   if (effect === 'scroll') {
     const { scrollOffset } = calculateScrollEffect(elapsedTime, effectSpeed, subtitleDuration);
-    console.log(`Scroll result: offset ${scrollOffset.toFixed(1)}`);
     return { displayText: text, scrollOffset };
   }
 

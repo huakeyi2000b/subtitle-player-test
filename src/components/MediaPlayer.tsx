@@ -279,8 +279,9 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         ...getTextEffectsCSS(subtitleStyle, true),
       };
 
-      // Determine display order based on swapBilingualOrder
-      const shouldSwapOrder = swapBilingualOrder;
+      // Determine display order based on translationPosition and swapBilingualOrder
+      const translationAbove = subtitleStyle.translationPosition === 'above';
+      const shouldSwapOrder = swapBilingualOrder ? !translationAbove : translationAbove;
       const firstText = shouldSwapOrder ? translatedText : originalText;
       const secondText = shouldSwapOrder ? originalText : translatedText;
       const firstStyle = shouldSwapOrder ? translationStyle : originalStyle;
@@ -383,18 +384,20 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           ...getTextEffectsCSS(subtitleStyle, true),
         };
 
-        // Determine display order based on swapBilingualOrder
-        const firstText = swapBilingualOrder ? translatedEffect.displayText : originalEffect.displayText;
-        const secondText = swapBilingualOrder ? originalEffect.displayText : translatedEffect.displayText;
-        const firstStyle = swapBilingualOrder ? translationStyle : originalStyle;
-        const secondStyle = swapBilingualOrder ? originalStyle : translationStyle;
+        // Determine display order based on translationPosition and swapBilingualOrder
+        const translationAbove = subtitleStyle.translationPosition === 'above';
+        const shouldSwapOrder = swapBilingualOrder ? !translationAbove : translationAbove;
+        const firstText = shouldSwapOrder ? translatedEffect.displayText : originalEffect.displayText;
+        const secondText = shouldSwapOrder ? originalEffect.displayText : translatedEffect.displayText;
+        const firstStyle = shouldSwapOrder ? translationStyle : originalStyle;
+        const secondStyle = shouldSwapOrder ? originalStyle : translationStyle;
 
         return (
           <div className="flex flex-col items-center gap-1 overflow-hidden">
             <p className="text-center leading-relaxed whitespace-nowrap" style={firstStyle}>
               {firstText}
               {subtitleStyle.effect === 'typing' && (
-                swapBilingualOrder ?
+                shouldSwapOrder ?
                   (translatedEffect.isAnimating && <span className="animate-pulse">|</span>) :
                   (originalEffect.isAnimating && <span className="animate-pulse">|</span>)
               )}
@@ -402,7 +405,7 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
             <p className="text-center leading-relaxed whitespace-nowrap" style={secondStyle}>
               {secondText}
               {subtitleStyle.effect === 'typing' && (
-                swapBilingualOrder ?
+                shouldSwapOrder ?
                   (originalEffect.isAnimating && <span className="animate-pulse">|</span>) :
                   (translatedEffect.isAnimating && <span className="animate-pulse">|</span>)
               )}
