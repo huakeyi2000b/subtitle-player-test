@@ -10,8 +10,8 @@ export interface TranslationOptions {
 }
 
 export const TRANSLATION_LANGUAGES = [
-  { code: 'zh', name: '中文' },
   { code: 'en', name: '英语' },
+  { code: 'zh', name: '中文' },
   { code: 'ja', name: '日语' },
   { code: 'ko', name: '韩语' },
   { code: 'fr', name: '法语' },
