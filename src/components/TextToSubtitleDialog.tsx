@@ -21,7 +21,6 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getStoredApiKey } from '@/components/SettingsDialog';
-import { splitTextToSubtitles } from '@/lib/textToSubtitleService';
 import type { Subtitle } from '@/lib/subtitleParser';
 
 const LANGUAGES = [
@@ -258,45 +257,156 @@ export function TextToSubtitleDialog({
     languageCode: string = 'auto',
     onProgress?: (status: string) => void
   ): Promise<Subtitle[]> => {
-    onProgress?.('正在分析文本...');
+    // First try to get AI timing, then apply our text segmentation
+    onProgress?.('正在分析音频时间轴...');
     
-    // Prepare form data
-    const formData = new FormData();
-    formData.append('audio', audioFile);
-    formData.append('text', text);
-    formData.append('language_code', languageCode);
-    
-    // Check for locally stored API key
-    const localApiKey = getStoredApiKey();
-    if (localApiKey) {
-      formData.append('api_key', localApiKey);
+    try {
+      // Use transcribe API to get timing information
+      const formData = new FormData();
+      formData.append('audio', audioFile);
+      formData.append('language_code', languageCode);
+      
+      const localApiKey = getStoredApiKey();
+      if (localApiKey) {
+        formData.append('api_key', localApiKey);
+      }
+      
+      const { data, error } = await supabase.functions.invoke('transcribe', {
+        body: formData,
+      });
+      
+      if (error) throw error;
+      if (!data || !data.words) throw new Error('无法获取转录结果');
+      
+      // Get AI word timing data
+      const words = data.words;
+      const totalStartTime = words[0]?.start || 0;
+      const totalEndTime = words[words.length - 1]?.end || 60;
+      
+      onProgress?.('正在应用智能文本分割...');
+      
+      // Apply our text segmentation logic
+      const cleanText = text.trim().replace(/第\s*\d+\s*段[:：]\s*/g, '');
+      const textSegments = [];
+      let currentSentence = '';
+      
+      for (let i = 0; i < cleanText.length; i++) {
+        const char = cleanText[i];
+        currentSentence += char;
+        
+        if (/[。！？；，.!?;,]/.test(char)) {
+          const trimmed = currentSentence.trim();
+          if (trimmed.length > 0) {
+            textSegments.push(trimmed);
+          }
+          currentSentence = '';
+        }
+      }
+      
+      if (currentSentence.trim().length > 0) {
+        textSegments.push(currentSentence.trim());
+      }
+      
+      // Smart time allocation based on text length and AI timing patterns
+      const subtitles: Subtitle[] = [];
+      
+      // Calculate relative weights for each text segment based on character count
+      const segmentWeights = textSegments.map(segment => {
+        // Consider both character count and complexity (punctuation, spaces)
+        const charCount = segment.length;
+        const wordCount = segment.split(/\s+/).length;
+        const punctCount = (segment.match(/[。！？；，.!?;,]/g) || []).length;
+        
+        // Weight formula: base on character count, adjust for word density and punctuation
+        return charCount + (wordCount * 0.5) + (punctCount * 2);
+      });
+      
+      const totalWeight = segmentWeights.reduce((sum, weight) => sum + weight, 0);
+      const totalDuration = totalEndTime - totalStartTime;
+      
+      // Allocate time based on weights, with minimum and maximum duration constraints
+      let currentTime = totalStartTime;
+      
+      textSegments.forEach((segment, index) => {
+        const weight = segmentWeights[index];
+        const proportionalDuration = (weight / totalWeight) * totalDuration;
+        
+        // Apply constraints: minimum 1.5s, maximum 6s per subtitle
+        const minDuration = 1.5;
+        const maxDuration = 6.0;
+        let duration = Math.max(minDuration, Math.min(maxDuration, proportionalDuration));
+        
+        // For very short segments, use minimum duration
+        if (segment.length < 10) {
+          duration = Math.max(1.0, duration * 0.8);
+        }
+        
+        // For very long segments, extend duration
+        if (segment.length > 50) {
+          duration = Math.min(maxDuration, duration * 1.2);
+        }
+        
+        const startTime = currentTime;
+        const endTime = currentTime + duration;
+        
+        subtitles.push({
+          id: index + 1,
+          startTime: startTime,
+          endTime: endTime,
+          text: segment
+        });
+        
+        currentTime = endTime;
+      });
+      
+      // Adjust final subtitle to not exceed total duration
+      if (subtitles.length > 0) {
+        const lastSubtitle = subtitles[subtitles.length - 1];
+        if (lastSubtitle.endTime > totalEndTime) {
+          lastSubtitle.endTime = totalEndTime;
+        }
+        
+        // If we're significantly under the total duration, proportionally extend all subtitles
+        const actualTotalDuration = lastSubtitle.endTime - totalStartTime;
+        if (actualTotalDuration < totalDuration * 0.8) {
+          const extensionRatio = totalDuration / actualTotalDuration;
+          
+          subtitles.forEach((subtitle, index) => {
+            const originalDuration = subtitle.endTime - subtitle.startTime;
+            const newDuration = originalDuration * extensionRatio;
+            
+            if (index === 0) {
+              subtitle.startTime = totalStartTime;
+              subtitle.endTime = totalStartTime + newDuration;
+            } else {
+              subtitle.startTime = subtitles[index - 1].endTime;
+              subtitle.endTime = subtitle.startTime + newDuration;
+            }
+          });
+          
+          // Ensure last subtitle doesn't exceed total duration
+          if (subtitles.length > 0) {
+            subtitles[subtitles.length - 1].endTime = Math.min(
+              subtitles[subtitles.length - 1].endTime,
+              totalEndTime
+            );
+          }
+        }
+      }
+      
+      onProgress?.('字幕生成完成');
+      return subtitles;
+      
+    } catch (error) {
+      // If AI fails, throw error to trigger fallback
+      throw error;
     }
-    
-    onProgress?.('正在生成字幕时间轴...');
-    
-    const { data, error } = await supabase.functions.invoke('text-to-subtitle', {
-      body: formData,
-    });
-    
-    if (error) {
-      console.error('Text to subtitle error:', error);
-      throw new Error(error.message || '文本转字幕失败');
-    }
-    
-    if (!data || !data.subtitles) {
-      throw new Error('无法生成字幕');
-    }
-    
-    onProgress?.('字幕生成完成');
-    
-    return data.subtitles as Subtitle[];
   };
 
-  // Simple text splitting fallback - use our improved logic with punctuation merging
+  // Simple text splitting fallback - use improved logic with smart timing
   const splitTextToSubtitlesInternal = (
     text: string,
-    videoDuration: number,
-    maxWordsPerSubtitle: number = 8
+    videoDuration: number
   ): Subtitle[] => {
     // 清理文本，移除段落标记
     const cleanText = text
@@ -304,7 +414,7 @@ export function TextToSubtitleDialog({
         .replace(/^\d+[.、]\s*/gm, '')
         .trim();
 
-    // 按中文标点符号分割句子，包括逗号，但保留标点符号
+    // 按逗号和句号分割，保留标点符号
     const sentences = [];
     let currentSentence = '';
     
@@ -312,7 +422,6 @@ export function TextToSubtitleDialog({
         const char = cleanText[i];
         currentSentence += char;
         
-        // 如果遇到分割标点符号
         if (/[。！？；，.!?;,]/.test(char)) {
             const trimmed = currentSentence.trim();
             if (trimmed.length > 0) {
@@ -322,55 +431,83 @@ export function TextToSubtitleDialog({
         }
     }
     
-    // 添加剩余的文本
     if (currentSentence.trim().length > 0) {
         sentences.push(currentSentence.trim());
     }
-    
-    const filteredSentences = sentences.filter(s => s.length > 0);
 
-    // 合并单独的标点符号到前一条
-    const mergedSentences = [];
-    for (let i = 0; i < filteredSentences.length; i++) {
-        const sentence = filteredSentences[i];
-        
-        // 检测单独的标点符号：长度为1且字符码在标点符号范围内
-        const charCode = sentence.charCodeAt(0);
-        const isPunctOnly = sentence.length === 1 && (
-            (charCode >= 8216 && charCode <= 8223) || // 各种引号
-            (charCode >= 65281 && charCode <= 65374) || // 全角标点
-            /[。！？；，.!?;,]/.test(sentence)
-        );
-
-        // 如果是单独的标点符号，合并到前一条
-        if (isPunctOnly && mergedSentences.length > 0) {
-            mergedSentences[mergedSentences.length - 1] += sentence;
-        } else {
-            mergedSentences.push(sentence);
-        }
-    }
-
-    if (mergedSentences.length === 0) {
+    if (sentences.length === 0) {
         return [];
     }
 
+    // Smart time allocation based on text complexity
     const subtitles: Subtitle[] = [];
-    const timePerSentence = videoDuration / mergedSentences.length;
+    
+    // Calculate weights for each sentence
+    const sentenceWeights = sentences.map(sentence => {
+      const charCount = sentence.length;
+      const wordCount = sentence.split(/\s+/).length;
+      const punctCount = (sentence.match(/[。！？；，.!?;,]/g) || []).length;
+      
+      // Weight based on reading complexity
+      return charCount + (wordCount * 0.3) + (punctCount * 1.5);
+    });
+    
+    const totalWeight = sentenceWeights.reduce((sum, weight) => sum + weight, 0);
+    let currentTime = 0;
 
-    mergedSentences.forEach((sentence, index) => {
-        const trimmedSentence = sentence.trim();
+    sentences.forEach((sentence, index) => {
+        const weight = sentenceWeights[index];
+        const proportionalDuration = (weight / totalWeight) * videoDuration;
+        
+        // Apply duration constraints
+        const minDuration = Math.max(1.2, sentence.length * 0.08); // Minimum based on reading speed
+        const maxDuration = Math.min(8.0, sentence.length * 0.15); // Maximum to prevent too long subtitles
+        
+        let duration = Math.max(minDuration, Math.min(maxDuration, proportionalDuration));
+        
+        // Adjust for sentence complexity
+        if (sentence.length < 8) {
+          duration = Math.max(1.0, duration * 0.8); // Shorter for very short sentences
+        } else if (sentence.length > 60) {
+          duration = Math.min(maxDuration, duration * 1.3); // Longer for complex sentences
+        }
 
-        // 直接使用完整句子，不再分割
-        const startTime = index * timePerSentence;
-        const endTime = (index + 1) * timePerSentence;
+        const startTime = currentTime;
+        const endTime = currentTime + duration;
 
         subtitles.push({
             id: subtitles.length + 1,
             startTime: Math.max(0, startTime),
             endTime: Math.min(videoDuration, endTime),
-            text: trimmedSentence
+            text: sentence.trim()
         });
+        
+        currentTime = endTime;
     });
+    
+    // Final adjustment to fit within video duration
+    if (subtitles.length > 0) {
+      const lastSubtitle = subtitles[subtitles.length - 1];
+      const actualDuration = lastSubtitle.endTime;
+      
+      if (actualDuration > videoDuration) {
+        // Compress all subtitles proportionally
+        const compressionRatio = videoDuration / actualDuration;
+        
+        subtitles.forEach(subtitle => {
+          subtitle.startTime *= compressionRatio;
+          subtitle.endTime *= compressionRatio;
+        });
+      } else if (actualDuration < videoDuration * 0.8) {
+        // Extend all subtitles proportionally if we're significantly under
+        const extensionRatio = videoDuration / actualDuration;
+        
+        subtitles.forEach(subtitle => {
+          subtitle.startTime *= extensionRatio;
+          subtitle.endTime *= extensionRatio;
+        });
+      }
+    }
 
     return subtitles;
   };
