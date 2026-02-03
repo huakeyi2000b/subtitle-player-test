@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Clock, Edit3, Plus, Copy, Clipboard, Minus, Undo2, Redo2, ArrowUpDown } from 'lucide-react';
+import { Clock, Edit3, Plus, Copy, Clipboard, Minus, Undo2, Redo2, ArrowUpDown, FileText } from 'lucide-react';
 import { formatTime } from '@/lib/subtitleParser';
 import type { Subtitle } from '@/lib/subtitleParser';
 import type { TranslatedSubtitle } from '@/lib/translationService';
@@ -76,6 +76,7 @@ interface SubtitleListProps {
   canUndo?: boolean;
   canRedo?: boolean;
   hasClipboard?: boolean;
+  onTextToSubtitle?: () => void;
 }
 
 export function SubtitleList({
@@ -94,6 +95,7 @@ export function SubtitleList({
   canUndo = false,
   canRedo = false,
   hasClipboard = false,
+  onTextToSubtitle,
 }: SubtitleListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLDivElement>(null);
@@ -224,6 +226,22 @@ export function SubtitleList({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>切换双语顺序</TooltipContent>
+                </Tooltip>
+              )}
+
+              {onTextToSubtitle && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={onTextToSubtitle}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>文本转字幕</TooltipContent>
                 </Tooltip>
               )}
 
