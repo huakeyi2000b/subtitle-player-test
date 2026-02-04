@@ -950,28 +950,21 @@ export function TextToSubtitleDialog({
           {hasExistingSubtitles && (
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">处理模式</Label>
-              <div className="flex gap-2">
-                <Button
-                  variant={mode === 'correct' ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setMode('correct')}
-                  disabled={isGenerating}
-                  className="gap-2"
+              <Select value={mode} onValueChange={(value: 'correct' | 'generate') => setMode(value)} disabled={isGenerating}>
+                <SelectTrigger className="bg-secondary border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent 
+                  side="bottom" 
+                  align="start"
+                  sideOffset={4}
+                  avoidCollisions={false}
+                  className="bg-card border-border z-[100] max-h-[200px] overflow-y-auto"
                 >
-                  <CheckCircle className="w-4 h-4" />
-                  修正错别字
-                </Button>
-                <Button
-                  variant={mode === 'generate' ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setMode('generate')}
-                  disabled={isGenerating}
-                  className="gap-2"
-                >
-                  <FileText className="w-4 h-4" />
-                  重新生成
-                </Button>
-              </div>
+                  <SelectItem value="correct">修正错别字 - 保持现有时间轴</SelectItem>
+                  <SelectItem value="generate">重新生成 - 重新生成时间轴</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="text-xs text-muted-foreground">
                 {mode === 'correct' 
                   ? '保持现有时间轴，只修正文字内容（推荐）' 
@@ -985,24 +978,21 @@ export function TextToSubtitleDialog({
           {mode === 'generate' && (
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">字幕类型</Label>
-              <div className="flex gap-2">
-                <Button
-                  variant={!useShortSubtitles ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setUseShortSubtitles(false)}
-                  disabled={isGenerating}
+              <Select value={useShortSubtitles ? "short" : "normal"} onValueChange={(value) => setUseShortSubtitles(value === "short")} disabled={isGenerating}>
+                <SelectTrigger className="bg-secondary border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent 
+                  side="bottom" 
+                  align="start"
+                  sideOffset={4}
+                  avoidCollisions={false}
+                  className="bg-card border-border z-[100] max-h-[200px] overflow-y-auto"
                 >
-                  普通字幕
-                </Button>
-                <Button
-                  variant={useShortSubtitles ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setUseShortSubtitles(true)}
-                  disabled={isGenerating}
-                >
-                  短字幕
-                </Button>
-              </div>
+                  <SelectItem value="normal">普通字幕 - 适合歌曲内容</SelectItem>
+                  <SelectItem value="short">短字幕 - 适合播音内容</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="text-xs text-muted-foreground">
                 {useShortSubtitles 
                   ? '短字幕：智能句逗断句，适合播音内容' 
@@ -1047,8 +1037,9 @@ export function TextToSubtitleDialog({
               </>
             ) : (
               <>
-                <p>• 智能分割：优先按换行符分割，其次按标点符号，最后按字符数</p>
-                <p>• 保持节奏：AI模式保持原始音频的节奏和时间轴</p>
+                <p>• 普通字幕：优先按换行符分割，其次按标点符号，适合歌曲</p>
+                <p>• 短字幕：智能句逗断句和空格分段，适合播音内容</p>
+                <p>• AI时间轴：有音频时使用AI生成精确时间轴</p>
                 <p>• 容错处理：API失败时自动降级到简单模式</p>
               </>
             )}
