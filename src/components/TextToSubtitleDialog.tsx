@@ -225,54 +225,75 @@ export function TextToSubtitleDialog({
       return existingSubtitles;
     }
     
-    const textSegments = smartTextSegmentation(text.trim());
+    // Clean input text: remove paragraph markers, numbers, punctuation and whitespace
+    const cleanInputText = text.trim()
+      .replace(/第\s*\d+\s*段[:：]\s*/g, '') // Remove "第X段："
+      .replace(/^\d+[.、]\s*/gm, '') // Remove numbered lists
+      .replace(/[\s\n\r，。！？；：、""''（）《》【】,\.!?;:\(\)\[\]"']+/g, '');
     
-    if (textSegments.length === 0) {
-      return existingSubtitles;
+    // Build the original subtitle text (with errors)
+    const originalText = existingSubtitles.map(sub => sub.text).join('');
+    const cleanOriginalText = originalText
+      .replace(/第\s*\d+\s*段[:：]\s*/g, '')
+      .replace(/^\d+[.、]\s*/gm, '')
+      .replace(/[\s\n\r，。！？；：、""''（）《》【】,\.!?;:\(\)\[\]"']+/g, '');
+    
+    console.log('Clean input text:', cleanInputText);
+    console.log('Clean original text:', cleanOriginalText);
+    
+    // Check if the texts are similar enough (allowing for typos)
+    const similarity = calculateSimilarity(cleanInputText, cleanOriginalText);
+    console.log('Text similarity:', similarity);
+    
+    if (similarity < 0.5) {
+      console.warn('Input text too different from original subtitles, similarity:', similarity);
+      // Still try to correct, but warn user
     }
     
+    // Strategy: Map the correct text to subtitles based on character position
     const correctedSubtitles = [...existingSubtitles];
+    let inputIndex = 0;
     
-    // If we have roughly the same number of segments as subtitles, do 1:1 mapping
-    if (Math.abs(textSegments.length - existingSubtitles.length) <= existingSubtitles.length * 0.3) {
-      const ratio = textSegments.length / existingSubtitles.length;
+    correctedSubtitles.forEach((subtitle, subIndex) => {
+      // Calculate how many characters this subtitle should have (excluding markers and punctuation)
+      const originalSubText = subtitle.text
+        .replace(/第\s*\d+\s*段[:：]\s*/g, '')
+        .replace(/^\d+[.、]\s*/gm, '')
+        .replace(/[\s\n\r，。！？；：、""''（）《》【】,\.!?;:\(\)\[\]"']+/g, '');
+      const charCount = originalSubText.length;
       
-      correctedSubtitles.forEach((subtitle, index) => {
-        const segmentIndex = Math.floor(index * ratio);
-        if (segmentIndex < textSegments.length) {
-          const newText = textSegments[segmentIndex].trim();
-          if (newText) {
-            subtitle.text = newText;
-          }
-        }
-      });
-    } else {
-      // Similarity-based matching for different lengths
-      const usedSegments = new Set<number>();
+      if (charCount === 0) {
+        // Keep empty or punctuation-only subtitles as is
+        return;
+      }
       
-      correctedSubtitles.forEach((subtitle) => {
-        let bestMatch = -1;
-        let bestSimilarity = 0;
+      // Extract the corresponding characters from input text
+      let newText = '';
+      let extractedChars = 0;
+      
+      while (extractedChars < charCount && inputIndex < cleanInputText.length) {
+        newText += cleanInputText[inputIndex];
+        inputIndex++;
+        extractedChars++;
+      }
+      
+      if (newText.length > 0) {
+        // Try to preserve original punctuation structure
+        const originalPunctuation = subtitle.text.match(/[，。！？；：、""''（）《》【】,\.!?;:\(\)\[\]"'\s]+/g) || [];
         
-        const cleanSubtitle = cleanTextForComparison(subtitle.text);
-        
-        textSegments.forEach((segment, segmentIndex) => {
-          if (usedSegments.has(segmentIndex)) return;
-          
-          const cleanSegment = cleanTextForComparison(segment);
-          const similarity = calculateSimilarity(cleanSubtitle, cleanSegment);
-          
-          if (similarity > bestSimilarity && similarity > 0.3) {
-            bestSimilarity = similarity;
-            bestMatch = segmentIndex;
-          }
-        });
-        
-        if (bestMatch >= 0) {
-          subtitle.text = textSegments[bestMatch].trim();
-          usedSegments.add(bestMatch);
+        // Simple approach: add back punctuation at the end if original had it
+        if (/[，。！？；：、""''（）《》【】,\.!?;:\(\)\[\]"']$/.test(subtitle.text)) {
+          const lastPunct = subtitle.text.match(/[，。！？；：、""''（）《》【】,\.!?;:\(\)\[\]"']+$/)?.[0] || '';
+          newText += lastPunct;
         }
-      });
+        
+        subtitle.text = newText;
+      }
+    });
+    
+    // Check if we used all the input text
+    if (inputIndex < cleanInputText.length) {
+      console.warn(`Unused input text: ${cleanInputText.length - inputIndex} characters remaining`);
     }
     
     return correctedSubtitles;
