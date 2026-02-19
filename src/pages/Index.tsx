@@ -343,7 +343,7 @@ const Index = () => {
               <UploadZone
                 type="subtitle"
                 onFileSelect={handleSubtitleUpload}
-                accept=".srt,.vtt"
+                accept=".srt,.vtt,.lrc"
                 currentFile={subtitleFileName}
               />
             </div>
@@ -410,7 +410,7 @@ const Index = () => {
                 <label className="cursor-pointer">
                   <input
                     type="file"
-                    accept=".srt,.vtt"
+                    accept=".srt,.vtt,.lrc"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) handleSubtitleUpload(file);

@@ -29,6 +29,22 @@ function parseVttTime(timeString: string): number {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+// Parse LRC time format [00:12.00] to seconds
+function parseLrcTime(timeString: string): number {
+  // Remove brackets and trim
+  const cleaned = timeString.replace(/[\[\]]/g, '').trim();
+  const parts = cleaned.split(':');
+  
+  if (parts.length !== 2) return NaN;
+  
+  const minutes = parseInt(parts[0]);
+  const seconds = parseFloat(parts[1]);
+  
+  if (isNaN(minutes) || isNaN(seconds)) return NaN;
+  
+  return minutes * 60 + seconds;
+}
+
 export function parseSRT(content: string): Subtitle[] {
   const subtitles: Subtitle[] = [];
   const blocks = content.trim().split(/\n\n+/);
@@ -108,11 +124,76 @@ export function parseVTT(content: string): Subtitle[] {
   return subtitles;
 }
 
+export function parseLRC(content: string): Subtitle[] {
+  const subtitles: Subtitle[] = [];
+  const lines = content.split('\n');
+  
+  interface LrcLine {
+    time: number;
+    text: string;
+  }
+  
+  const lrcLines: LrcLine[] = [];
+  
+  // Parse all lines with timestamps
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    
+    // Match LRC format: [mm:ss.xx]text or [mm:ss]text
+    // More flexible regex to handle various formats
+    const match = trimmed.match(/^\[(\d+:\d+(?:\.\d+)?)\](.*)$/);
+    if (match) {
+      const timeStr = match[1];
+      const text = match[2].trim();
+      
+      // Check if this is a metadata line (contains : but not a valid time format)
+      // Valid time format: digits:digits.digits
+      if (!/^\d+:\d+(\.\d+)?$/.test(timeStr)) {
+        continue;
+      }
+      
+      const time = parseLrcTime(timeStr);
+      
+      // Only add valid time entries with non-empty text
+      if (!isNaN(time) && time >= 0 && text.length > 0) {
+        lrcLines.push({ time, text });
+      }
+    }
+  }
+  
+  // Sort by time
+  lrcLines.sort((a, b) => a.time - b.time);
+  
+  // Convert to subtitles with end times
+  for (let i = 0; i < lrcLines.length; i++) {
+    const current = lrcLines[i];
+    
+    // End time is the start of next line, or current time + 3 seconds for last line
+    const endTime = i < lrcLines.length - 1 
+      ? lrcLines[i + 1].time 
+      : current.time + 3;
+    
+    subtitles.push({
+      id: i + 1,
+      startTime: current.time,
+      endTime: endTime,
+      text: current.text
+    });
+  }
+  
+  return subtitles;
+}
+
 export function parseSubtitleFile(content: string, filename: string): Subtitle[] {
   const extension = filename.toLowerCase().split('.').pop();
   
   if (extension === 'vtt') {
     return parseVTT(content);
+  }
+  
+  if (extension === 'lrc') {
+    return parseLRC(content);
   }
   
   return parseSRT(content);
