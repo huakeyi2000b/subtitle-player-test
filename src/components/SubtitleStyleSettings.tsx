@@ -253,7 +253,7 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
 
     const startTime = Date.now();
     const duration = 3000; // 3 seconds for preview
-    const speedFactor = style.effectSpeed / 5;
+    const speedFactor = style.effectSpeed / 10; // Adjusted for 1-20 range
 
     const animate = () => {
       const elapsed = (Date.now() - startTime) / 1000;
@@ -880,13 +880,13 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                 <div className="flex items-center justify-between">
                   <Label className="text-sm text-muted-foreground">动画速度</Label>
                   <span className="text-sm text-foreground">
-                    {style.effectSpeed <= 3 ? '慢' : style.effectSpeed <= 7 ? '中' : '快'}
+                    {style.effectSpeed <= 5 ? '慢' : style.effectSpeed <= 10 ? '中' : style.effectSpeed <= 15 ? '快' : '极快'}
                   </span>
                 </div>
                 <Slider
                   value={[style.effectSpeed]}
                   min={1}
-                  max={10}
+                  max={20}
                   step={1}
                   onValueChange={(v) => updateStyle({ effectSpeed: v[0] })}
                 />
