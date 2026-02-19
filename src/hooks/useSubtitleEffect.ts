@@ -72,16 +72,23 @@ export function calculateScrollEffect(
 // Calculate karaoke effect - text highlights progressively from left to right
 export function calculateKaraokeEffect(
   elapsedTime: number, // time since subtitle started (seconds)
-  effectSpeed: number, // 1-10
+  effectSpeed: number, // 1-20
   totalDuration: number
 ): { progress: number; isComplete: boolean } {
-  // Karaoke effect uses the full duration of the subtitle
-  // Speed affects how smooth the transition is, but always completes by the end
-  if (elapsedTime >= totalDuration) {
+  // Speed determines how much of the subtitle duration is used for karaoke
+  // Speed 1 = use 100% of duration (slowest)
+  // Speed 5 = use 80% of duration
+  // Speed 10 = use 50% of duration
+  // Speed 15 = use 30% of duration
+  // Speed 20 = use 20% of duration (fastest)
+  const speedFactor = Math.max(0.2, 1.1 - (effectSpeed / 20) * 0.9); // 0.2 to 1.0
+  const karaokeDuration = totalDuration * speedFactor;
+  
+  if (elapsedTime >= karaokeDuration) {
     return { progress: 1, isComplete: true };
   }
 
-  const progress = Math.min(1, elapsedTime / totalDuration);
+  const progress = Math.min(1, elapsedTime / karaokeDuration);
   
   return { 
     progress, 
