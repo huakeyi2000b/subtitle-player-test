@@ -168,7 +168,7 @@ export function drawSubtitleOnCanvas(
 
   // Calculate animation state if currentTime is provided
   const subtitleDuration = subtitle.endTime - subtitle.startTime;
-  const elapsedTime = currentTime ? Math.max(0, currentTime - subtitle.startTime) : subtitleDuration;
+  const elapsedTime = currentTime !== undefined ? Math.max(0, currentTime - subtitle.startTime) : subtitleDuration;
 
   // Determine original and translated text
   let originalTextRaw: string;
@@ -213,7 +213,7 @@ export function drawSubtitleOnCanvas(
     style.effectSpeed,
     elapsedTime,
     subtitleDuration
-  ) : { displayText: '', scrollOffset: 0 };
+  ) : { displayText: '', scrollOffset: 0, karaokeProgress: 0 };
 
   // Calculate position
   const padding = 20;
@@ -229,6 +229,7 @@ export function drawSubtitleOnCanvas(
     fontFamily: string;
     isTranslation: boolean;
     scrollOffset?: number;
+    karaokeProgress?: number;
   }> = [];
   
   const isTranslationAbove = style.translationPosition === 'above';
@@ -242,6 +243,7 @@ export function drawSubtitleOnCanvas(
       fontFamily: getFontFamilyCSS(style.translationFontFamily),
       isTranslation: true,
       scrollOffset: translatedAnimated.scrollOffset,
+      karaokeProgress: translatedAnimated.karaokeProgress,
     });
   }
 
@@ -254,6 +256,7 @@ export function drawSubtitleOnCanvas(
       fontFamily: getFontFamilyCSS(style.fontFamily),
       isTranslation: false,
       scrollOffset: originalAnimated.scrollOffset,
+      karaokeProgress: originalAnimated.karaokeProgress,
     });
   }
 
@@ -266,6 +269,7 @@ export function drawSubtitleOnCanvas(
       fontFamily: getFontFamilyCSS(style.translationFontFamily),
       isTranslation: true,
       scrollOffset: translatedAnimated.scrollOffset,
+      karaokeProgress: translatedAnimated.karaokeProgress,
     });
   }
 
@@ -351,13 +355,93 @@ export function drawSubtitleOnCanvas(
       ctx.strokeStyle = textStrokeColor;
       ctx.lineWidth = textStrokeWidth * 2; // Scale for canvas
       ctx.lineJoin = 'round';
-      ctx.strokeText(line.text, textX, textY, maxWidth - 40);
+      
+      // For karaoke effect, draw stroke for both parts
+      if (style.effect === 'karaoke' && line.karaokeProgress !== undefined) {
+        const splitIndex = Math.floor(line.text.length * line.karaokeProgress);
+        const highlightedPart = line.text.substring(0, splitIndex);
+        const remainingPart = line.text.substring(splitIndex);
+        
+        // Temporarily change text align to left for precise positioning
+        ctx.textAlign = 'left';
+        
+        // Measure text widths
+        const highlightedWidth = ctx.measureText(highlightedPart).width;
+        const totalWidth = ctx.measureText(line.text).width;
+        const startX = textX - totalWidth / 2;
+        
+        // Draw stroke for highlighted part (if any)
+        if (highlightedPart) {
+          ctx.strokeText(highlightedPart, startX, textY, maxWidth - 40);
+        }
+        // Draw stroke for remaining part
+        if (remainingPart) {
+          ctx.strokeText(remainingPart, startX + highlightedWidth, textY, maxWidth - 40);
+        }
+        
+        // Restore text align
+        ctx.textAlign = 'center';
+      } else {
+        ctx.strokeText(line.text, textX, textY, maxWidth - 40);
+      }
     }
     
-    // Draw main text
-    ctx.fillStyle = line.color;
-    if (!textShadow) { // Only draw if shadow wasn't already drawn
-      ctx.fillText(line.text, textX, textY, maxWidth - 40);
+    // Draw main text with karaoke effect
+    if (style.effect === 'karaoke' && line.karaokeProgress !== undefined) {
+      const splitIndex = Math.floor(line.text.length * line.karaokeProgress);
+      const highlightedPart = line.text.substring(0, splitIndex);
+      const remainingPart = line.text.substring(splitIndex);
+      
+      // Temporarily change text align to left for precise positioning
+      ctx.textAlign = 'left';
+      
+      // Measure text widths
+      const highlightedWidth = ctx.measureText(highlightedPart).width;
+      const totalWidth = ctx.measureText(line.text).width;
+      const startX = textX - totalWidth / 2;
+      
+      // Draw highlighted part (if any)
+      if (highlightedPart) {
+        if (textShadow) {
+          ctx.save();
+          ctx.shadowColor = textShadowColor;
+          ctx.shadowBlur = textShadowBlur * 2;
+          ctx.shadowOffsetX = textShadowOffsetX * 2;
+          ctx.shadowOffsetY = textShadowOffsetY * 2;
+          ctx.fillStyle = style.karaokeHighlightColor;
+          ctx.fillText(highlightedPart, startX, textY, maxWidth - 40);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = style.karaokeHighlightColor;
+          ctx.fillText(highlightedPart, startX, textY, maxWidth - 40);
+        }
+      }
+      
+      // Draw remaining part
+      if (remainingPart) {
+        if (textShadow) {
+          ctx.save();
+          ctx.shadowColor = textShadowColor;
+          ctx.shadowBlur = textShadowBlur * 2;
+          ctx.shadowOffsetX = textShadowOffsetX * 2;
+          ctx.shadowOffsetY = textShadowOffsetY * 2;
+          ctx.fillStyle = line.color;
+          ctx.fillText(remainingPart, startX + highlightedWidth, textY, maxWidth - 40);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = line.color;
+          ctx.fillText(remainingPart, startX + highlightedWidth, textY, maxWidth - 40);
+        }
+      }
+      
+      // Restore text align
+      ctx.textAlign = 'center';
+    } else {
+      // Draw normal text
+      ctx.fillStyle = line.color;
+      if (!textShadow) { // Only draw if shadow wasn't already drawn
+        ctx.fillText(line.text, textX, textY, maxWidth - 40);
+      }
     }
     
     // Move to next line position

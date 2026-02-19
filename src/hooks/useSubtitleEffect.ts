@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export type SubtitleEffect = 'none' | 'typing' | 'scroll';
+export type SubtitleEffect = 'none' | 'typing' | 'scroll' | 'karaoke';
 
 interface UseSubtitleEffectOptions {
   text: string;
@@ -14,6 +14,7 @@ interface UseSubtitleEffectOptions {
 interface SubtitleEffectResult {
   displayText: string;
   scrollOffset: number; // 0-100 percentage for scroll effect
+  karaokeProgress: number; // 0-1 progress for karaoke effect
   isAnimating: boolean;
 }
 
@@ -68,6 +69,26 @@ export function calculateScrollEffect(
   return { scrollOffset, isComplete: false };
 }
 
+// Calculate karaoke effect - text highlights progressively from left to right
+export function calculateKaraokeEffect(
+  elapsedTime: number, // time since subtitle started (seconds)
+  effectSpeed: number, // 1-10
+  totalDuration: number
+): { progress: number; isComplete: boolean } {
+  // Karaoke effect uses the full duration of the subtitle
+  // Speed affects how smooth the transition is, but always completes by the end
+  if (elapsedTime >= totalDuration) {
+    return { progress: 1, isComplete: true };
+  }
+
+  const progress = Math.min(1, elapsedTime / totalDuration);
+  
+  return { 
+    progress, 
+    isComplete: false 
+  };
+}
+
 export function useSubtitleEffect({
   text,
   effect,
@@ -82,6 +103,7 @@ export function useSubtitleEffect({
     return {
       displayText: text,
       scrollOffset: 0,
+      karaokeProgress: 0,
       isAnimating: false,
     };
   }
@@ -96,6 +118,7 @@ export function useSubtitleEffect({
     return {
       displayText,
       scrollOffset: 0,
+      karaokeProgress: 0,
       isAnimating: !isComplete,
     };
   }
@@ -109,6 +132,21 @@ export function useSubtitleEffect({
     return {
       displayText: text,
       scrollOffset,
+      karaokeProgress: 0,
+      isAnimating: !isComplete,
+    };
+  }
+
+  if (effect === 'karaoke') {
+    const { progress, isComplete } = calculateKaraokeEffect(
+      elapsedTime,
+      effectSpeed,
+      subtitleDuration
+    );
+    return {
+      displayText: text,
+      scrollOffset: 0,
+      karaokeProgress: progress,
       isAnimating: !isComplete,
     };
   }
@@ -116,6 +154,7 @@ export function useSubtitleEffect({
   return {
     displayText: text,
     scrollOffset: 0,
+    karaokeProgress: 0,
     isAnimating: false,
   };
 }
@@ -127,20 +166,25 @@ export function getAnimatedTextForCanvas(
   effectSpeed: number,
   elapsedTime: number,
   subtitleDuration: number
-): { displayText: string; scrollOffset: number } {
+): { displayText: string; scrollOffset: number; karaokeProgress: number } {
   if (effect === 'none' || !text) {
-    return { displayText: text, scrollOffset: 0 };
+    return { displayText: text, scrollOffset: 0, karaokeProgress: 0 };
   }
 
   if (effect === 'typing') {
     const { displayText } = calculateTypingEffect(text, elapsedTime, effectSpeed, subtitleDuration);
-    return { displayText, scrollOffset: 0 };
+    return { displayText, scrollOffset: 0, karaokeProgress: 0 };
   }
 
   if (effect === 'scroll') {
     const { scrollOffset } = calculateScrollEffect(elapsedTime, effectSpeed, subtitleDuration);
-    return { displayText: text, scrollOffset };
+    return { displayText: text, scrollOffset, karaokeProgress: 0 };
   }
 
-  return { displayText: text, scrollOffset: 0 };
+  if (effect === 'karaoke') {
+    const { progress } = calculateKaraokeEffect(elapsedTime, effectSpeed, subtitleDuration);
+    return { displayText: text, scrollOffset: 0, karaokeProgress: progress };
+  }
+
+  return { displayText: text, scrollOffset: 0, karaokeProgress: 0 };
 }

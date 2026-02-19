@@ -289,6 +289,20 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
   const renderSubtitleContent = () => {
     if (!currentSubtitle) return null;
 
+    // Helper function to render karaoke effect
+    const renderKaraokeText = (text: string, progress: number, normalColor: string, highlightColor: string) => {
+      const splitIndex = Math.floor(text.length * progress);
+      const highlightedPart = text.substring(0, splitIndex);
+      const remainingPart = text.substring(splitIndex);
+      
+      return (
+        <>
+          <span style={{ color: highlightColor }}>{highlightedPart}</span>
+          <span style={{ color: normalColor }}>{remainingPart}</span>
+        </>
+      );
+    };
+
     // Check if subtitle has translatedText field (from translation feature)
     const hasTranslatedField = hasTranslatedText;
 
@@ -363,36 +377,64 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
           {showOriginal && showTranslation && (
             <>
               <p className="text-center leading-relaxed whitespace-nowrap" style={firstStyle}>
-                {firstText}
-                {subtitleStyle.effect === 'typing' && (
+                {subtitleStyle.effect === 'karaoke' ? (
                   shouldSwapOrder ?
-                    (translatedEffect.isAnimating && <span className="animate-pulse">|</span>) :
-                    (originalEffect.isAnimating && <span className="animate-pulse">|</span>)
+                    renderKaraokeText(firstText, translatedEffect.karaokeProgress, subtitleStyle.translationFontColor, subtitleStyle.karaokeHighlightColor) :
+                    renderKaraokeText(firstText, originalEffect.karaokeProgress, subtitleStyle.fontColor, subtitleStyle.karaokeHighlightColor)
+                ) : (
+                  <>
+                    {firstText}
+                    {subtitleStyle.effect === 'typing' && (
+                      shouldSwapOrder ?
+                        (translatedEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                        (originalEffect.isAnimating && <span className="animate-pulse">|</span>)
+                    )}
+                  </>
                 )}
               </p>
               <p className="text-center leading-relaxed whitespace-nowrap" style={secondStyle}>
-                {secondText}
-                {subtitleStyle.effect === 'typing' && (
+                {subtitleStyle.effect === 'karaoke' ? (
                   shouldSwapOrder ?
-                    (originalEffect.isAnimating && <span className="animate-pulse">|</span>) :
-                    (translatedEffect.isAnimating && <span className="animate-pulse">|</span>)
+                    renderKaraokeText(secondText, originalEffect.karaokeProgress, subtitleStyle.fontColor, subtitleStyle.karaokeHighlightColor) :
+                    renderKaraokeText(secondText, translatedEffect.karaokeProgress, subtitleStyle.translationFontColor, subtitleStyle.karaokeHighlightColor)
+                ) : (
+                  <>
+                    {secondText}
+                    {subtitleStyle.effect === 'typing' && (
+                      shouldSwapOrder ?
+                        (originalEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                        (translatedEffect.isAnimating && <span className="animate-pulse">|</span>)
+                    )}
+                  </>
                 )}
               </p>
             </>
           )}
           {showOriginal && !showTranslation && (
             <p className="text-center leading-relaxed whitespace-nowrap" style={originalStyle}>
-              {originalText}
-              {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
-                <span className="animate-pulse">|</span>
+              {subtitleStyle.effect === 'karaoke' ? (
+                renderKaraokeText(originalText, originalEffect.karaokeProgress, subtitleStyle.fontColor, subtitleStyle.karaokeHighlightColor)
+              ) : (
+                <>
+                  {originalText}
+                  {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
+                    <span className="animate-pulse">|</span>
+                  )}
+                </>
               )}
             </p>
           )}
           {!showOriginal && showTranslation && (
             <p className="text-center leading-relaxed whitespace-nowrap" style={translationStyle}>
-              {translatedText}
-              {subtitleStyle.effect === 'typing' && translatedEffect.isAnimating && (
-                <span className="animate-pulse">|</span>
+              {subtitleStyle.effect === 'karaoke' ? (
+                renderKaraokeText(translatedText, translatedEffect.karaokeProgress, subtitleStyle.translationFontColor, subtitleStyle.karaokeHighlightColor)
+              ) : (
+                <>
+                  {translatedText}
+                  {subtitleStyle.effect === 'typing' && translatedEffect.isAnimating && (
+                    <span className="animate-pulse">|</span>
+                  )}
+                </>
               )}
             </p>
           )}
@@ -473,36 +515,64 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
             {showOriginal && showTranslation && (
               <>
                 <p className="text-center leading-relaxed whitespace-nowrap" style={firstStyle}>
-                  {firstText}
-                  {subtitleStyle.effect === 'typing' && (
+                  {subtitleStyle.effect === 'karaoke' ? (
                     shouldSwapOrder ?
-                      (translatedEffect.isAnimating && <span className="animate-pulse">|</span>) :
-                      (originalEffect.isAnimating && <span className="animate-pulse">|</span>)
+                      renderKaraokeText(firstText, translatedEffect.karaokeProgress, subtitleStyle.translationFontColor, subtitleStyle.karaokeHighlightColor) :
+                      renderKaraokeText(firstText, originalEffect.karaokeProgress, subtitleStyle.fontColor, subtitleStyle.karaokeHighlightColor)
+                  ) : (
+                    <>
+                      {firstText}
+                      {subtitleStyle.effect === 'typing' && (
+                        shouldSwapOrder ?
+                          (translatedEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                          (originalEffect.isAnimating && <span className="animate-pulse">|</span>)
+                      )}
+                    </>
                   )}
                 </p>
                 <p className="text-center leading-relaxed whitespace-nowrap" style={secondStyle}>
-                  {secondText}
-                  {subtitleStyle.effect === 'typing' && (
+                  {subtitleStyle.effect === 'karaoke' ? (
                     shouldSwapOrder ?
-                      (originalEffect.isAnimating && <span className="animate-pulse">|</span>) :
-                      (translatedEffect.isAnimating && <span className="animate-pulse">|</span>)
+                      renderKaraokeText(secondText, originalEffect.karaokeProgress, subtitleStyle.fontColor, subtitleStyle.karaokeHighlightColor) :
+                      renderKaraokeText(secondText, translatedEffect.karaokeProgress, subtitleStyle.translationFontColor, subtitleStyle.karaokeHighlightColor)
+                  ) : (
+                    <>
+                      {secondText}
+                      {subtitleStyle.effect === 'typing' && (
+                        shouldSwapOrder ?
+                          (originalEffect.isAnimating && <span className="animate-pulse">|</span>) :
+                          (translatedEffect.isAnimating && <span className="animate-pulse">|</span>)
+                      )}
+                    </>
                   )}
                 </p>
               </>
             )}
             {showOriginal && !showTranslation && (
               <p className="text-center leading-relaxed whitespace-nowrap" style={originalStyle}>
-                {originalEffect.displayText}
-                {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
-                  <span className="animate-pulse">|</span>
+                {subtitleStyle.effect === 'karaoke' ? (
+                  renderKaraokeText(originalEffect.displayText, originalEffect.karaokeProgress, subtitleStyle.fontColor, subtitleStyle.karaokeHighlightColor)
+                ) : (
+                  <>
+                    {originalEffect.displayText}
+                    {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
+                      <span className="animate-pulse">|</span>
+                    )}
+                  </>
                 )}
               </p>
             )}
             {!showOriginal && showTranslation && (
               <p className="text-center leading-relaxed whitespace-nowrap" style={translationStyle}>
-                {translatedEffect.displayText}
-                {subtitleStyle.effect === 'typing' && translatedEffect.isAnimating && (
-                  <span className="animate-pulse">|</span>
+                {subtitleStyle.effect === 'karaoke' ? (
+                  renderKaraokeText(translatedEffect.displayText, translatedEffect.karaokeProgress, subtitleStyle.translationFontColor, subtitleStyle.karaokeHighlightColor)
+                ) : (
+                  <>
+                    {translatedEffect.displayText}
+                    {subtitleStyle.effect === 'typing' && translatedEffect.isAnimating && (
+                      <span className="animate-pulse">|</span>
+                    )}
+                  </>
                 )}
               </p>
             )}
@@ -540,9 +610,15 @@ export const MediaPlayer = forwardRef<MediaPlayerRef, MediaPlayerProps>(({
         return (
           <div className="flex flex-col items-center gap-1 overflow-hidden">
             <p className="text-center leading-relaxed whitespace-nowrap" style={originalStyle}>
-              {originalEffect.displayText}
-              {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
-                <span className="animate-pulse">|</span>
+              {subtitleStyle.effect === 'karaoke' ? (
+                renderKaraokeText(originalEffect.displayText, originalEffect.karaokeProgress, subtitleStyle.fontColor, subtitleStyle.karaokeHighlightColor)
+              ) : (
+                <>
+                  {originalEffect.displayText}
+                  {subtitleStyle.effect === 'typing' && originalEffect.isAnimating && (
+                    <span className="animate-pulse">|</span>
+                  )}
+                </>
               )}
             </p>
           </div>

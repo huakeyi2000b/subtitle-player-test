@@ -52,7 +52,7 @@ export type FontFamily =
   // Hebrew fonts
   | 'noto-sans-hebrew';
 
-export type SubtitleEffect = 'none' | 'typing' | 'scroll';
+export type SubtitleEffect = 'none' | 'typing' | 'scroll' | 'karaoke';
 
 export interface SubtitleStyle {
   fontSize: number;
@@ -93,6 +93,7 @@ export interface SubtitleStyle {
   // Animation effects
   effect: SubtitleEffect;
   effectSpeed: number; // 1-10, where 5 is normal
+  karaokeHighlightColor: string; // Color for highlighted text in karaoke mode
 }
 
 export const fontFamilyOptions: { value: FontFamily; name: string; css: string; category: string }[] = [
@@ -205,6 +206,7 @@ const defaultStyle: SubtitleStyle = {
   // Animation defaults
   effect: 'none',
   effectSpeed: 5,
+  karaokeHighlightColor: '#FFD700', // Gold color for karaoke highlight
 };
 
 const colorPresets = [
@@ -236,6 +238,7 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
   const [animationKey, setAnimationKey] = useState(0);
   const [displayText, setDisplayText] = useState('');
   const [scrollOffset, setScrollOffset] = useState(0);
+  const [karaokeProgress, setKaraokeProgress] = useState(0);
   const previewText = '这是字幕预览效果';
   const animationRef = useRef<number>();
 
@@ -244,6 +247,7 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
     if (style.effect === 'none') {
       setDisplayText(previewText);
       setScrollOffset(0);
+      setKaraokeProgress(0);
       return;
     }
 
@@ -261,12 +265,20 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
         const charCount = Math.floor(previewText.length * progress);
         setDisplayText(previewText.substring(0, charCount));
         setScrollOffset(0);
+        setKaraokeProgress(0);
       } else if (style.effect === 'scroll') {
         const scrollDuration = 1.5;
         const progress = Math.min(1, adjustedElapsed / scrollDuration);
         const easedProgress = 1 - Math.pow(1 - progress, 3);
         setScrollOffset(100 * (1 - easedProgress));
         setDisplayText(previewText);
+        setKaraokeProgress(0);
+      } else if (style.effect === 'karaoke') {
+        const karaokeDuration = 2.5;
+        const progress = Math.min(1, adjustedElapsed / karaokeDuration);
+        setKaraokeProgress(progress);
+        setDisplayText(previewText);
+        setScrollOffset(0);
       }
 
       if (elapsed < duration) {
@@ -858,6 +870,7 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                   <SelectItem value="none">无效果</SelectItem>
                   <SelectItem value="typing">打字效果</SelectItem>
                   <SelectItem value="scroll">滚动效果</SelectItem>
+                  <SelectItem value="karaoke">卡拉OK效果</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -877,6 +890,27 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                   step={1}
                   onValueChange={(v) => updateStyle({ effectSpeed: v[0] })}
                 />
+              </div>
+            )}
+
+            {style.effect === 'karaoke' && (
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">高亮颜色</Label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={style.karaokeHighlightColor}
+                    onChange={(e) => updateStyle({ karaokeHighlightColor: e.target.value })}
+                    className="w-12 h-8 rounded border border-border cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={style.karaokeHighlightColor}
+                    onChange={(e) => updateStyle({ karaokeHighlightColor: e.target.value })}
+                    className="flex-1 px-2 py-1 text-sm rounded border border-border bg-background"
+                    placeholder="#FFD700"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -911,9 +945,22 @@ export function SubtitleStyleSettings({ style, onStyleChange, hasTranslation = f
                       transform: `translateX(${scrollOffset}%)`,
                     }}
                   >
-                    {displayText}
-                    {style.effect === 'typing' && displayText.length < previewText.length && (
-                      <span className="animate-pulse">|</span>
+                    {style.effect === 'karaoke' ? (
+                      <>
+                        <span style={{ color: style.karaokeHighlightColor }}>
+                          {displayText.substring(0, Math.floor(displayText.length * karaokeProgress))}
+                        </span>
+                        <span style={{ color: style.fontColor }}>
+                          {displayText.substring(Math.floor(displayText.length * karaokeProgress))}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {displayText}
+                        {style.effect === 'typing' && displayText.length < previewText.length && (
+                          <span className="animate-pulse">|</span>
+                        )}
+                      </>
                     )}
                   </span>
                 </div>
