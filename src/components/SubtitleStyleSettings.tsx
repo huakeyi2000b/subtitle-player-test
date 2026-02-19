@@ -138,9 +138,9 @@ export const getFontFamilyCSS = (fontFamily: FontFamily): string => {
 
 // Function to remove punctuation from text
 export const removePunctuationFromText = (text: string): string => {
-  // Remove common punctuation marks (periods, commas, semicolons, colons, etc.)
-  // Keep spaces and other characters intact
-  return text.replace(/[.,;:!?。，；：！？、]/g, '');
+  // Replace common punctuation marks with spaces (instead of removing them)
+  // This prevents words from being concatenated together
+  return text.replace(/[.,;:!?。，；：！？、]/g, ' ').replace(/\s+/g, ' ').trim();
 };
 
 export const getTextEffectsCSS = (style: SubtitleStyle, isTranslation: boolean = false): React.CSSProperties => {
