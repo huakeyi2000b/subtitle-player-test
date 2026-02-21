@@ -22,7 +22,7 @@ export function UploadZone({ type, onFileSelect, accept, currentFile }: UploadZo
 
   const Icon = type === 'media' ? Film : FileText;
   const title = type === 'media' ? '上传媒体文件' : '上传字幕文件';
-  const subtitle = type === 'media' ? 'MP4, MP3, WebM' : 'SRT, VTT';
+  const subtitle = type === 'media' ? 'MP4, MP3, WebM' : 'SRT, VTT, LRC';
 
   return (
     <label
