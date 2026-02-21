@@ -343,7 +343,7 @@ const Index = () => {
               <UploadZone
                 type="subtitle"
                 onFileSelect={handleSubtitleUpload}
-                accept=".srt,.vtt,.lrc"
+                accept="text/plain,.srt,text/vtt,.vtt,.lrc,application/x-subrip"
                 currentFile={subtitleFileName}
               />
             </div>
